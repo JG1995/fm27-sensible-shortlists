@@ -95,7 +95,18 @@ internal sealed class ChannelReader : IGameReader
         }
 
         _answered.Add(key);
-        onValue(value is null ? null : new GameValue(value.AsString()));
+        // Whatever goes wrong reading the value, whoever asked still gets an answer.
+        string? text = null;
+        try
+        {
+            text = value?.AsString();
+        }
+        catch (Exception exception)
+        {
+            InteropFeed.ReportFirstFailure(nameof(ChannelReader), exception);
+        }
+
+        onValue(text is null ? null : new GameValue(text));
         return true;
     }
 

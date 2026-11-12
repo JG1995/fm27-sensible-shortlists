@@ -134,6 +134,14 @@ public class InboxTriageTests
     }
 
     [Fact]
+    public void A_record_that_is_not_a_team_is_not_taken_as_the_managers_team()
+    {
+        _triage.ManagerTeamSeen(GameText.Player);
+
+        Assert.Empty(_lines);
+    }
+
+    [Fact]
     public void Loading_another_game_forgets_the_team_and_the_messages_already_judged()
     {
         _game.AnswerImmediatelyWith = null;
