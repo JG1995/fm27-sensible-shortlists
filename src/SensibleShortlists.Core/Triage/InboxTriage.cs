@@ -27,7 +27,8 @@ public sealed class InboxTriage
 
     public void ManagerTeamSeen(uint record)
     {
-        if (_managerTeam == record)
+        // The channel that reveals the team is recognised by name only; make sure it was asked of a team.
+        if (_managerTeam == record || !new RecordLink(record).IsTeam)
         {
             return;
         }
