@@ -41,6 +41,9 @@ public sealed class InteropTraceSession
         var label = $"{TraceText.Sanitize(reference)}.{TraceText.Sanitize(property)}";
         if (!_filter.Matches(label))
         {
+            // The game reuses keys. A key that now stands for an untraced channel must not keep
+            // reporting values under its old label.
+            _tracedChannels.TryRemove(key, out _);
             return;
         }
 

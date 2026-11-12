@@ -3,6 +3,7 @@ using BepInEx.Unity.IL2CPP;
 using HarmonyLib;
 using SensibleShortlists.Core.Diagnostics;
 using SensibleShortlists.Plugin.Game;
+using SensibleShortlists.Plugin.Game.Trace;
 
 namespace SensibleShortlists.Plugin;
 

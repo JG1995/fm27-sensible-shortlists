@@ -70,7 +70,7 @@ internal static class GameDescriber
         }
         catch (Exception exception)
         {
-            return $"{text} <items unreadable: {exception.GetType().Name}>";
+            return $"{text} <error: {exception.GetType().Name}>";
         }
     }
 

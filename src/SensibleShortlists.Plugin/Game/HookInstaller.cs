@@ -5,8 +5,8 @@ using HarmonyLib;
 namespace SensibleShortlists.Plugin.Game;
 
 /// <summary>
-/// Installs hooks one at a time. Game updates rename and reshape methods, and a hook that no longer
-/// fits must cost that one capability, not the whole plugin.
+/// Installs hooks one at a time. Game updates rename and reshape methods and types, and a hook that
+/// no longer fits must cost that one capability, not the whole plugin.
 /// </summary>
 internal sealed class HookInstaller
 {
@@ -19,12 +19,16 @@ internal sealed class HookInstaller
         _log = log;
     }
 
-    public bool TryInstallPrefix(Type targetType, string methodName, Type[] parameterTypes, MethodInfo prefix)
+    /// <param name="name">The game method, for the log.</param>
+    /// <param name="resolve">
+    /// Finds the game method and the prefix. It runs inside the guard because naming a game type that
+    /// a new build no longer has throws as soon as the code that names it is reached.
+    /// </param>
+    public bool TryInstallPrefix(string name, Func<(MethodBase? Target, MethodInfo Prefix)> resolve)
     {
-        var name = $"{targetType.Name}.{methodName}";
         try
         {
-            var target = AccessTools.Method(targetType, methodName, parameterTypes);
+            var (target, prefix) = resolve();
             if (target is null)
             {
                 _log.LogWarning($"Hook skipped: {name} does not exist in this game build.");
