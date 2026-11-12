@@ -59,9 +59,10 @@ public sealed class InteropTraceSession
 
     /// <summary>
     /// Values arrive for every bound property in the game, thousands per screen. The description is
-    /// only computed for traced channels, so the common case costs one dictionary lookup.
+    /// only computed for traced channels, and the value is passed as state so callers can use a
+    /// static describer: the common case costs one dictionary lookup and no allocation.
     /// </summary>
-    public void ValueChanged(ulong key, Func<string?> describeValue)
+    public void ValueChanged<TValue>(ulong key, TValue value, Func<TValue, string?> describe)
     {
         lock (_gate)
         {
@@ -70,7 +71,7 @@ public sealed class InteropTraceSession
                 return;
             }
 
-            _sink.Write($"VALUE key={key} {label} = {TraceText.Sanitize(TraceText.Describe(describeValue))}");
+            _sink.Write($"VALUE key={key} {label} = {TraceText.Sanitize(TraceText.Describe(value, describe))}");
         }
     }
 }
