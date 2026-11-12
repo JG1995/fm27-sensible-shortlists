@@ -33,8 +33,9 @@ internal static class GameDescriber
     /// <summary>A binding key is one 64-bit number in a struct; reading it directly avoids a native call.</summary>
     public static ulong KeyNumber(ref Bindings.Key key) => Unsafe.As<Bindings.Key, ulong>(ref key);
 
+    /// <summary>The game prints a property as <c>Name:number</c>, which is all the trace needs.</summary>
     public static string? Property(PropertyID property) =>
-        TraceText.Describe(property, static id => $"{id.ToString()}#{id.id}");
+        TraceText.Describe(property, static id => id.ToString());
 
     public static string? Reference(InteropReference? reference) =>
         TraceText.Describe(reference, static r => r is null ? null : DescribeReference(r));
@@ -59,11 +60,17 @@ internal static class GameDescriber
     {
         var text = $"{value.DataType?.Name ?? "?"}:{value.AsString()}";
 
-        // Lists print as their type name only, and the lists are what the trace is for: the messages
-        // in the inbox and the players on a shortlist. Failing to expand one must not lose the line.
+        // References and lists print as their type name only, and they are what the trace is for:
+        // which message, which player, which messages are in the inbox. Failing to expand one must
+        // not lose the line.
         try
         {
             var boxed = value.Get();
+            if (boxed?.TryCast<InteropReference>() is { } reference)
+            {
+                return DescribeReference(reference);
+            }
+
             var items = boxed?.TryCast<Il2CppSystem.Collections.IList>();
             var collection = boxed?.TryCast<Il2CppSystem.Collections.ICollection>();
             return items is null || collection is null ? text : $"{text} {DescribeItems(items, collection.Count)}";
@@ -80,12 +87,22 @@ internal static class GameDescriber
         var text = new StringBuilder().Append(count).Append(" items {");
         for (var i = 0; i < count && i < MaxListItems; i++)
         {
-            var item = items[i];
-            var reference = item?.TryCast<InteropReference>();
-            text.Append(i == 0 ? string.Empty : "; ")
-                .Append(reference is null ? item?.ToString() ?? "null" : DescribeReference(reference));
+            text.Append(i == 0 ? string.Empty : "; ").Append(DescribeItem(items[i]));
         }
 
         return text.Append(count > MaxListItems ? "; …}" : "}").ToString();
+    }
+
+    // The game's lists hold values wrapped in TypedValue, one level down from the list itself.
+    private static string DescribeItem(Il2CppSystem.Object? item)
+    {
+        if (item?.TryCast<TypedValue>() is { } value)
+        {
+            return DescribeValue(value);
+        }
+
+        return item?.TryCast<InteropReference>() is { } reference
+            ? DescribeReference(reference)
+            : item?.ToString() ?? "null";
     }
 }

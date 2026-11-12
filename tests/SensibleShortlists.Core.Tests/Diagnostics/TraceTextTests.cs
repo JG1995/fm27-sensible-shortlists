@@ -17,6 +17,12 @@ public class TraceTextTests
     }
 
     [Fact]
+    public void Other_control_characters_are_written_as_hex_escapes()
+    {
+        Assert.Equal(@"\x01link\x02text\x01", TraceText.Sanitize("\u0001link\u0002text\u0001"));
+    }
+
+    [Fact]
     public void Text_at_the_limit_is_unchanged()
     {
         var text = new string('x', TraceText.MaxLength);
