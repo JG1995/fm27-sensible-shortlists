@@ -20,8 +20,7 @@ internal static class InteropTraceHooks
         {
             hooks.TryInstallPrefix(SendEventHook.Name, SendEventHook.Resolve),
             hooks.TryInstallPrefix(OpenChannelHook.Name, OpenChannelHook.Resolve),
-            hooks.TryInstallPrefix(SetValueHooks.SetInternalName, SetValueHooks.ResolveSetInternal),
-            hooks.TryInstallPrefix(SetValueHooks.SetPrefetchedName, SetValueHooks.ResolveSetPrefetched),
+            hooks.TryInstallPrefix(ChannelDataHook.Name, ChannelDataHook.Resolve),
         };
 
         return (installed.Count(wasInstalled => wasInstalled), installed.Length);

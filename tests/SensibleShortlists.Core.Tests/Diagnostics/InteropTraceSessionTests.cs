@@ -186,6 +186,55 @@ public class InteropTraceSessionTests
     }
 
     [Fact]
+    public void A_batch_pairs_each_key_with_the_value_at_the_same_position()
+    {
+        var session = Session();
+        session.ChannelOpened(1, "A", "Shortlist1");
+        session.ChannelOpened(3, "A", "Shortlist3");
+        _sink.Lines.Clear();
+        var inspected = new List<string>();
+
+        session.ValuesDelivered(new ulong[] { 1, 2, 3 }, new[] { "one", "two", "three" }, value =>
+        {
+            inspected.Add(value);
+            return value;
+        });
+
+        Assert.Equal(new[] { "VALUE key=1 A.Shortlist1 = one", "VALUE key=3 A.Shortlist3 = three" }, _sink.Lines);
+        Assert.Equal(new[] { "one", "three" }, inspected);
+    }
+
+    [Theory]
+    [InlineData(new ulong[] { 1, 2 }, new[] { "one" })]
+    [InlineData(new ulong[] { 1 }, new[] { "one", "two" })]
+    public void A_batch_with_unequal_counts_is_noted_and_paired_as_far_as_it_goes(ulong[] keys, string[] values)
+    {
+        var session = Session();
+        session.ChannelOpened(1, "A", "Shortlist1");
+        _sink.Lines.Clear();
+
+        session.ValuesDelivered(keys, values, value => value);
+
+        Assert.Equal(
+            new[]
+            {
+                $"NOTE value batch has {keys.Length} keys and {values.Length} values; paired by position",
+                "VALUE key=1 A.Shortlist1 = one",
+            },
+            _sink.Lines);
+    }
+
+    [Fact]
+    public void A_batch_with_unequal_counts_and_no_traced_key_is_not_noted()
+    {
+        var session = Session();
+
+        session.ValuesDelivered(new ulong[] { 7, 8 }, new[] { "one" }, value => value);
+
+        Assert.Empty(_sink.Lines);
+    }
+
+    [Fact]
     public void Recorded_text_is_sanitized()
     {
         Session().EventSent("Name", 1, "target\nwith break", null);
