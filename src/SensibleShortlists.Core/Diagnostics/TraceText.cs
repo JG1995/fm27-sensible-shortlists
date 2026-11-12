@@ -20,8 +20,28 @@ public static class TraceText
             kept--;
         }
 
-        var escaped = text[..kept].Replace("\r", @"\r").Replace("\n", @"\n").Replace("\t", @"\t");
+        var escaped = Escape(text[..kept]);
         return kept == text.Length ? escaped : $"{escaped}…(+{text.Length - kept})";
+    }
+
+    // The game marks links inside its strings with control characters, so every one of them is
+    // written visibly, not only the ones that would break a line.
+    private static string Escape(string text)
+    {
+        var escaped = new System.Text.StringBuilder(text.Length);
+        foreach (var character in text)
+        {
+            escaped.Append(character switch
+            {
+                '\r' => @"\r",
+                '\n' => @"\n",
+                '\t' => @"\t",
+                < ' ' => $@"\x{(int)character:X2}",
+                _ => character.ToString(),
+            });
+        }
+
+        return escaped.ToString();
     }
 
     /// <summary>
