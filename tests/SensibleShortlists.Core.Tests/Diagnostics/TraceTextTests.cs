@@ -37,13 +37,13 @@ public class TraceTextTests
     [Fact]
     public void Describe_returns_the_description()
     {
-        Assert.Equal("Int32:4", TraceText.Describe(() => "Int32:4"));
+        Assert.Equal("Int32:4", TraceText.Describe(4, number => $"Int32:{number}"));
     }
 
     [Fact]
     public void Describe_turns_a_failure_into_a_marker_naming_the_exception()
     {
-        var description = TraceText.Describe(() => throw new InvalidOperationException("boom"));
+        var description = TraceText.Describe<object?>(null, _ => throw new InvalidOperationException("boom"));
 
         Assert.Equal("<error: InvalidOperationException>", description);
     }

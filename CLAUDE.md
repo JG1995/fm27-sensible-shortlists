@@ -18,7 +18,15 @@ Aside from this requirement, this codebase is yours: the product is decided by t
 ## Commands
 Record the exact commands here as soon as they exist, and correct them when the toolchain changes: install, run, test (the whole suite and a single file), typecheck, and lint.
 
-None yet.
+The plugin project compiles against the Il2CppInterop assemblies in the game's `BepInEx/interop` folder. Set `FM27_GAME_DIR` if FM27 is not in the default Steam location. The core and its tests need only the .NET 6 SDK.
+
+* Install: `dotnet restore SensibleShortlists.sln`
+* Build, which is also the typecheck (warnings are errors): `dotnet build SensibleShortlists.sln`
+* Test, whole suite: `dotnet test SensibleShortlists.sln`
+* Test, without the game installed: `dotnet test tests/SensibleShortlists.Core.Tests`
+* Test, one class: `dotnet test tests/SensibleShortlists.Core.Tests --filter FullyQualifiedName~InteropTraceSessionTests`
+* Lint: `dotnet format SensibleShortlists.sln --verify-no-changes`
+* Run: `scripts/deploy.sh`, then restart FM27. The plugin logs to `<game>/BepInEx/LogOutput.log` and traces to `<game>/BepInEx/SensibleShortlists.trace.log`. The game cannot be started or driven from the command line, so in-game behaviour is checked by hand.
 
 ## Conventions
 * Always follow TDD.

@@ -50,7 +50,7 @@ public class InteropTraceSessionTests
         session.ChannelOpened(42, "PersonReference[1:2]", "HumanShortlists");
         _sink.Lines.Clear();
 
-        session.ValueChanged(42, () => "List`1:3 items");
+        session.ValueChanged(42, 3, count => $"List`1:{count} items");
 
         Assert.Equal(
             new[] { "VALUE key=42 PersonReference[1:2].HumanShortlists = List`1:3 items" },
@@ -64,10 +64,10 @@ public class InteropTraceSessionTests
         session.ChannelOpened(42, "TeamReference[3:4]", "TrainingSchedule");
         var inspected = false;
 
-        session.ValueChanged(42, () =>
+        session.ValueChanged(42, "anything", value =>
         {
             inspected = true;
-            return "anything";
+            return value;
         });
 
         Assert.Empty(_sink.Lines);
@@ -82,7 +82,7 @@ public class InteropTraceSessionTests
         session.ChannelOpened(42, "PersonReference[1:2]", "HumanShortlistsCount");
         _sink.Lines.Clear();
 
-        session.ValueChanged(42, () => "Int32:3");
+        session.ValueChanged(42, "Int32:3", value => value);
 
         Assert.Equal(
             new[] { "VALUE key=42 PersonReference[1:2].HumanShortlistsCount = Int32:3" },
@@ -98,8 +98,8 @@ public class InteropTraceSessionTests
         _sink.Lines.Clear();
 
         session.ChannelOpened(3, "A", "Shortlist3");
-        session.ValueChanged(1, () => "old");
-        session.ValueChanged(3, () => "new");
+        session.ValueChanged(1, "old", value => value);
+        session.ValueChanged(3, "new", value => value);
 
         Assert.Equal(
             new[]
@@ -120,7 +120,7 @@ public class InteropTraceSessionTests
         _sink.Lines.Clear();
 
         session.ChannelOpened(2, "A", "Shortlist2b");
-        session.ValueChanged(1, () => "kept");
+        session.ValueChanged(1, "kept", value => value);
 
         Assert.Equal(
             new[] { "CHANNEL key=2 A.Shortlist2b", "VALUE key=1 A.Shortlist1 = kept" },
@@ -134,7 +134,7 @@ public class InteropTraceSessionTests
         session.ChannelOpened(42, "PersonReference[1:2]", "HumanShortlists");
         _sink.Lines.Clear();
 
-        session.ValueChanged(42, () => throw new InvalidOperationException("boom"));
+        session.ValueChanged<object?>(42, null, _ => throw new InvalidOperationException("boom"));
 
         Assert.Equal(
             new[] { "VALUE key=42 PersonReference[1:2].HumanShortlists = <error: InvalidOperationException>" },

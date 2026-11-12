@@ -22,11 +22,11 @@ public static class TraceText
     /// Runs a description that reads game objects. Those reads can fail in ways the plugin cannot
     /// predict, and a failed description must not cost the record it belongs to.
     /// </summary>
-    public static string? Describe(Func<string?> describe)
+    public static string? Describe<TState>(TState state, Func<TState, string?> describe)
     {
         try
         {
-            return describe();
+            return describe(state);
         }
         catch (Exception exception)
         {
