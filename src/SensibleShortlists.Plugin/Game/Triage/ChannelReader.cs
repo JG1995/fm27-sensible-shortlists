@@ -27,18 +27,16 @@ internal sealed class ChannelReader : IGameReader
     private readonly Queue<(Action<GameInteropSubsystem> Call, Action<GameValue?>? OnValue)> _queue = new();
     private readonly Dictionary<ulong, Action<GameValue?>> _waiting = new();
     private ulong _nextKey = FirstKey;
-    private int? _game;
+    private readonly List<ulong> _answered = new();
 
     public ChannelReader(PropertyCatalog properties) => _properties = properties;
+
+    /// <summary>The running game's identifier, needed to refer to a person in it.</summary>
+    public int? Game { get; set; }
 
     public void ReadMessage(object message, string property, Action<GameValue?> onValue)
     {
         var reference = (InteropReference)message;
-        if (_game is null && GameReferences.TryGetGame(reference, out var game))
-        {
-            _game = game;
-        }
-
         _queue.Enqueue((interop => Open(interop, reference, property, onValue), onValue));
     }
 
@@ -46,7 +44,7 @@ internal sealed class ChannelReader : IGameReader
         _queue.Enqueue((
             interop =>
             {
-                if (_game is not { } game)
+                if (Game is not { } game)
                 {
                     onValue(null);
                     return;
@@ -59,10 +57,19 @@ internal sealed class ChannelReader : IGameReader
     /// <summary>Makes the queued calls into the game. Called on the game's tick.</summary>
     public void Flush()
     {
-        if (_queue.Count == 0 || !GameSubsystems.TryGet<GameInteropSubsystem>(out var interop))
+        if ((_queue.Count == 0 && _answered.Count == 0)
+            || !GameSubsystems.TryGet<GameInteropSubsystem>(out var interop))
         {
             return;
         }
+
+        // Closing answered channels is not rationed: it only gives back what the plugin took.
+        foreach (var key in _answered)
+        {
+            interop.CloseChannel(GameReferences.Key(key));
+        }
+
+        _answered.Clear();
 
         for (var made = 0; made < ReadsPerTick && _queue.TryDequeue(out var queued); made++)
         {
@@ -87,7 +94,7 @@ internal sealed class ChannelReader : IGameReader
             return false;
         }
 
-        _queue.Enqueue((interop => interop.CloseChannel(GameReferences.Key(key)), null));
+        _answered.Add(key);
         onValue(value is null ? null : new GameValue(value.AsString()));
         return true;
     }

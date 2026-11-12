@@ -41,7 +41,12 @@ internal sealed class TriageObserver : IInteropObserver
         {
             if (!_reader.TryDeliver(keys[i], values[i]) && _watch.CarriesMessages(keys[i]))
             {
-                _triage.MessagesListed(GameReferences.Messages(values[i]));
+                var (game, messages) = GameReferences.Messages(values[i]);
+                if (messages.Length > 0)
+                {
+                    _reader.Game = game;
+                    _triage.MessagesListed(game, messages);
+                }
             }
         }
     }

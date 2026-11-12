@@ -34,9 +34,6 @@ internal static class GameReferences
         return found;
     }
 
-    public static bool TryGetGame(InteropReference reference, out int game) =>
-        reference.TryGetValue(GameKey, out game);
-
     /// <summary>A reference to a person in the running game, from the record a link points to.</summary>
     public static InteropReference Person(uint record, int game)
     {
@@ -47,23 +44,42 @@ internal static class GameReferences
         return new PersonReference(ids);
     }
 
-    /// <summary>The messages in a list value. The game wraps each list item in a value of its own.</summary>
-    public static ListedMessage[] Messages(TypedValue? list)
+    /// <summary>
+    /// The messages in a list value, with the running game's identifier. The game wraps each list
+    /// item in a value of its own. Each message is copied: the plugin reads from it on a later tick,
+    /// and the game is free to reuse the objects it delivered.
+    /// </summary>
+    public static (int Game, ListedMessage[] Messages) Messages(TypedValue? list)
     {
         var boxed = list?.Get();
         var items = boxed?.TryCast<Il2CppSystem.Collections.IList>();
         var count = boxed?.TryCast<Il2CppSystem.Collections.ICollection>()?.Count ?? 0;
         var messages = new List<ListedMessage>(count);
+        var game = 0;
         for (var i = 0; items is not null && i < count; i++)
         {
             var message = items[i]?.TryCast<TypedValue>()?.Get()?.TryCast<InteropReference>();
-            if (message is not null && message.TryGetValue(MessageNumberKey, out var number))
+            if (message is not null
+                && message.TryGetValue(MessageNumberKey, out var number)
+                && message.TryGetValue(GameKey, out game))
             {
-                messages.Add(new ListedMessage(number, message));
+                messages.Add(new ListedMessage(number, new NewsItemReference(CopyOf(message.m_id))));
             }
         }
 
-        return messages.ToArray();
+        return (game, messages.ToArray());
+    }
+
+    private static Il2CppSystem.Collections.Generic.List<InteropReference.Pair> CopyOf(
+        Il2CppSystem.Collections.Generic.List<InteropReference.Pair> ids)
+    {
+        var copy = new Il2CppSystem.Collections.Generic.List<InteropReference.Pair>();
+        for (var i = 0; i < ids.Count; i++)
+        {
+            copy.Add(ids[i]);
+        }
+
+        return copy;
     }
 
     private static uint Code(string fourCharacters) =>

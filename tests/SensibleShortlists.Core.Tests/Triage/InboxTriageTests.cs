@@ -11,11 +11,13 @@ public class InboxTriageTests
 
     public InboxTriageTests() => _triage = new InboxTriage(_game, new ListSink(_lines));
 
+    private const int Game = 6068085;
+
     private static string NoiseTitle =>
         $"{GameText.Link(GameText.Brighton, "Brighton")} make offer for {GameText.Link(GameText.Player, "King")}";
 
     private void List(params long[] ids) =>
-        _triage.MessagesListed(ids.Select(id => new ListedMessage(id, $"message {id}")).ToArray());
+        _triage.MessagesListed(Game, ids.Select(id => new ListedMessage(id, $"message {id}")).ToArray());
 
     private void AnswerFlags(long id, bool canRespond = false, bool? forwarded = true)
     {
@@ -129,6 +131,23 @@ public class InboxTriageTests
         _triage.ManagerTeamSeen(GameText.Brighton);
 
         Assert.Equal(new[] { "TEAM 24:565", "TEAM 24:504" }, _lines);
+    }
+
+    [Fact]
+    public void Loading_another_game_forgets_the_team_and_the_messages_already_judged()
+    {
+        _game.AnswerImmediatelyWith = null;
+        _triage.ManagerTeamSeen(GameText.ManagerTeam);
+        List(1);
+        _lines.Clear();
+
+        _triage.MessagesListed(Game + 1, new[] { new ListedMessage(1, "message 1") });
+        _triage.ManagerTeamSeen(GameText.ManagerTeam);
+
+        Assert.Equal(3, _lines.Count);
+        Assert.Equal($"NOTE game {Game + 1}", _lines[0]);
+        Assert.StartsWith("MESSAGE 1 ", _lines[1]);
+        Assert.Equal("TEAM 24:565", _lines[2]);
     }
 
     [Fact]

@@ -17,6 +17,7 @@ public sealed class InboxTriage
     private readonly ITraceSink _log;
     private readonly HashSet<long> _started = new();
     private uint? _managerTeam;
+    private long? _runningGame;
 
     public InboxTriage(IGameReader game, ITraceSink log)
     {
@@ -35,8 +36,18 @@ public sealed class InboxTriage
         _log.Write($"TEAM {new RecordLink(record)}");
     }
 
-    public void MessagesListed(IReadOnlyList<ListedMessage> messages)
+    /// <param name="game">The running game's identifier, which every reference to its objects carries.</param>
+    public void MessagesListed(long game, IReadOnlyList<ListedMessage> messages)
     {
+        // Another career was loaded: its messages reuse the same numbers, and its manager may run another team.
+        if (_runningGame is { } known && known != game)
+        {
+            _started.Clear();
+            _managerTeam = null;
+            _log.Write($"NOTE game {game}");
+        }
+
+        _runningGame = game;
         foreach (var message in messages)
         {
             if (_started.Add(message.Id))
