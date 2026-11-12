@@ -82,4 +82,27 @@ public sealed class InteropTraceSession
             _sink.Write($"VALUE key={key} {label} = {description}");
         }
     }
+
+    /// <summary>
+    /// The game delivers values in batches: a list of channel keys and a list of values. Whether the
+    /// two always line up is not known, so a batch that does not is noted rather than dropped.
+    /// </summary>
+    public void ValuesDelivered<TValue>(
+        IReadOnlyList<ulong> keys,
+        IReadOnlyList<TValue> values,
+        Func<TValue, string?> describe)
+    {
+        if (keys.Count != values.Count && keys.Any(_tracedChannels.ContainsKey))
+        {
+            lock (_gate)
+            {
+                _sink.Write($"NOTE value batch has {keys.Count} keys and {values.Count} values; paired by position");
+            }
+        }
+
+        for (var i = 0; i < keys.Count && i < values.Count; i++)
+        {
+            ValueChanged(keys[i], values[i], describe);
+        }
+    }
 }
