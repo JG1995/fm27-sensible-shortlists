@@ -115,6 +115,25 @@ public class InteropTraceSessionTests
     }
 
     [Fact]
+    public void Reopening_a_traced_key_for_a_channel_that_matches_no_term_stops_tracing_it()
+    {
+        var session = Session();
+        session.ChannelOpened(42, "PersonReference[1:2]", "HumanShortlists");
+        session.ChannelOpened(42, "TeamReference[3:4]", "TrainingSchedule");
+        _sink.Lines.Clear();
+        var inspected = false;
+
+        session.ValueChanged(42, "anything", value =>
+        {
+            inspected = true;
+            return value;
+        });
+
+        Assert.Empty(_sink.Lines);
+        Assert.False(inspected);
+    }
+
+    [Fact]
     public void Reaching_the_capacity_forgets_every_traced_channel_and_notes_it()
     {
         var session = Session(capacity: 2);
