@@ -25,7 +25,7 @@ public class InboxTriageTests
         _game.Answer($"message {id}", "IsForwarded", forwarded is { } value ? Flag(value) : null);
     }
 
-    private static GameValue Flag(bool value) => new(value ? "True" : "False", null);
+    private static GameValue Flag(bool value) => new(value ? "True" : "False");
 
     [Fact]
     public void A_story_about_a_shortlisted_player_is_judged_quiet_and_recorded()
@@ -33,7 +33,7 @@ public class InboxTriageTests
         _triage.ManagerTeamSeen(GameText.ManagerTeam);
         List(12849);
         AnswerFlags(12849);
-        _game.Answer("message 12849", "NewsTitleString", new GameValue(NoiseTitle, null));
+        _game.Answer("message 12849", "NewsTitleString", new GameValue(NoiseTitle));
         _game.Answer(GameText.Player, "IsShortlisted", Flag(true));
 
         Assert.Equal(
@@ -51,7 +51,7 @@ public class InboxTriageTests
     {
         List(1);
         AnswerFlags(1);
-        _game.Answer("message 1", "NewsTitleString", new GameValue(NoiseTitle, null));
+        _game.Answer("message 1", "NewsTitleString", new GameValue(NoiseTitle));
 
         Assert.Empty(_lines);
         Assert.Equal(new[] { (object)GameText.Player }, _game.Waiting("IsShortlisted"));
@@ -62,7 +62,7 @@ public class InboxTriageTests
     {
         List(1);
         AnswerFlags(1, forwarded: false);
-        _game.Answer("message 1", "NewsTitleString", new GameValue("Coaching Advice", null));
+        _game.Answer("message 1", "NewsTitleString", new GameValue("Coaching Advice"));
 
         Assert.Equal(
             new[]
@@ -80,7 +80,7 @@ public class InboxTriageTests
         _triage.ManagerTeamSeen(GameText.ManagerTeam);
         List(1);
         AnswerFlags(1, forwarded: null);
-        _game.Answer("message 1", "NewsTitleString", new GameValue(NoiseTitle, null));
+        _game.Answer("message 1", "NewsTitleString", new GameValue(NoiseTitle));
         _game.Answer(GameText.Player, "IsShortlisted", null);
 
         Assert.Equal(
@@ -116,7 +116,7 @@ public class InboxTriageTests
         List(1);
         AnswerFlags(1);
         var title = $"{GameText.Link(GameText.Player, "King")} and {GameText.Link(GameText.Player, "King")} again";
-        _game.Answer("message 1", "NewsTitleString", new GameValue(title, null));
+        _game.Answer("message 1", "NewsTitleString", new GameValue(title));
 
         Assert.Single(_game.Waiting("IsShortlisted"));
     }

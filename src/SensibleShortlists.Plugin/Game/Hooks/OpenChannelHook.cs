@@ -5,9 +5,9 @@ using SI.Bindable;
 using SI.Bindable.Reference.Core;
 using SI.Interop;
 
-namespace SensibleShortlists.Plugin.Game.Trace;
+namespace SensibleShortlists.Plugin.Game.Hooks;
 
-/// <summary>Observes the UI asking the simulation core for a property of a game object.</summary>
+/// <summary>Sees every request to the simulation core for a property of a game object.</summary>
 internal static class OpenChannelHook
 {
     public const string Name = "GameInteropSubsystem.OpenChannel";
@@ -19,16 +19,6 @@ internal static class OpenChannelHook
             new[] { typeof(InteropReference), typeof(PropertyID), typeof(Bindings.Key) }),
         AccessTools.Method(typeof(OpenChannelHook), nameof(Prefix)));
 
-    private static void Prefix(InteropReference __0, PropertyID __1, Bindings.Key __2)
-    {
-        try
-        {
-            TraceHookContext.Session?.ChannelOpened(
-                GameDescriber.KeyNumber(ref __2), GameDescriber.Reference(__0), GameDescriber.Property(__1));
-        }
-        catch (Exception exception)
-        {
-            TraceHookContext.ReportFirstFailure(Name, exception);
-        }
-    }
+    private static void Prefix(InteropReference __0, PropertyID __1, Bindings.Key __2) =>
+        InteropFeed.ChannelOpened(__0, __1, GameReferences.KeyNumber(ref __2));
 }

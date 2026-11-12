@@ -4,9 +4,9 @@ using HarmonyLib;
 using SI.Core;
 using SI.Interop;
 
-namespace SensibleShortlists.Plugin.Game.Trace;
+namespace SensibleShortlists.Plugin.Game.Hooks;
 
-/// <summary>Observes every event and action the UI sends to the simulation core.</summary>
+/// <summary>Sees every event and action the UI sends to the simulation core.</summary>
 internal static class SendEventHook
 {
     public const string Name = "GameInteropSubsystem.SendEvent";
@@ -18,16 +18,6 @@ internal static class SendEventHook
             new[] { typeof(uint), typeof(InteropReference), typeof(TypedValue) }),
         AccessTools.Method(typeof(SendEventHook), nameof(Prefix)));
 
-    private static void Prefix(uint __0, InteropReference __1, TypedValue __2)
-    {
-        try
-        {
-            TraceHookContext.Session?.EventSent(
-                GameDescriber.EventName(__0), __0, GameDescriber.Reference(__1), GameDescriber.Value(__2));
-        }
-        catch (Exception exception)
-        {
-            TraceHookContext.ReportFirstFailure(Name, exception);
-        }
-    }
+    private static void Prefix(uint __0, InteropReference __1, TypedValue __2) =>
+        InteropFeed.EventSent(__0, __1, __2);
 }

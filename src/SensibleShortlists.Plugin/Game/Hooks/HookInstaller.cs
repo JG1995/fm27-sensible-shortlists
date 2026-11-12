@@ -2,7 +2,7 @@ using System.Reflection;
 using BepInEx.Logging;
 using HarmonyLib;
 
-namespace SensibleShortlists.Plugin.Game;
+namespace SensibleShortlists.Plugin.Game.Hooks;
 
 /// <summary>
 /// Installs hooks one at a time. Game updates rename and reshape methods and types, and a hook that
