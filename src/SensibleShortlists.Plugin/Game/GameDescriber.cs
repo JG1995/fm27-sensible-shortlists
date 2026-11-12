@@ -1,8 +1,6 @@
-using System.Runtime.CompilerServices;
 using System.Text;
 using FM.GamePlugin;
 using SensibleShortlists.Core.Diagnostics;
-using SI.Bindable;
 using SI.Bindable.Reference.Core;
 using SI.Core;
 using SI.Interop;
@@ -29,9 +27,6 @@ internal static class GameDescriber
 
             return Enum.IsDefined(typeof(ActionID), n) ? ((ActionID)n).ToString() : "?";
         });
-
-    /// <summary>A binding key is one 64-bit number in a struct; reading it directly avoids a native call.</summary>
-    public static ulong KeyNumber(ref Bindings.Key key) => Unsafe.As<Bindings.Key, ulong>(ref key);
 
     /// <summary>The game prints a property as <c>Name:number</c>, which is all the trace needs.</summary>
     public static string? Property(PropertyID property) =>

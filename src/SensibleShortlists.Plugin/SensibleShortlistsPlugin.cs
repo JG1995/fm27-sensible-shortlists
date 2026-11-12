@@ -2,8 +2,10 @@ using BepInEx;
 using BepInEx.Unity.IL2CPP;
 using HarmonyLib;
 using SensibleShortlists.Core.Diagnostics;
-using SensibleShortlists.Plugin.Game;
+using SensibleShortlists.Core.Triage;
+using SensibleShortlists.Plugin.Game.Hooks;
 using SensibleShortlists.Plugin.Game.Trace;
+using SensibleShortlists.Plugin.Game.Triage;
 
 namespace SensibleShortlists.Plugin;
 
@@ -12,12 +14,19 @@ namespace SensibleShortlists.Plugin;
 public sealed class SensibleShortlistsPlugin : BasePlugin
 {
     private const string TraceFileName = "SensibleShortlists.trace.log";
+    private const string TriageFileName = "SensibleShortlists.triage.log";
 
-    private FileTraceSink? _traceSink;
+    private readonly List<FileTraceSink> _files = new();
     private Harmony? _harmony;
 
     public override void Load()
     {
+        var mode = Config.Bind(
+            "QuietShortlist",
+            "Mode",
+            nameof(TriageMode.Off),
+            "Off: do nothing. Observe: judge each inbox message and record the verdict to "
+            + $"BepInEx/{TriageFileName}, without changing anything in the game.");
         var traceInterop = Config.Bind(
             "Diagnostics",
             "TraceInterop",
@@ -33,36 +42,51 @@ public sealed class SensibleShortlistsPlugin : BasePlugin
 
         Log.LogInfo($"{MyPluginInfo.PLUGIN_NAME} {MyPluginInfo.PLUGIN_VERSION} loaded.");
 
-        if (traceInterop.Value)
+        var observers = new List<IInteropObserver>();
+        if (traceInterop.Value && Open(TraceFileName, "Interop trace") is { } traceFile)
         {
-            StartTrace(traceFilter.Value);
+            observers.Add(new TraceObserver(new InteropTraceSession(TraceFilter.Parse(traceFilter.Value), traceFile)));
         }
+
+        if (TriageModes.Parse(mode.Value) == TriageMode.Observe && Open(TriageFileName, "Inbox triage") is { } triageFile)
+        {
+            var reader = new ChannelReader(new PropertyCatalog(triageFile));
+            observers.Add(new TriageObserver(new InboxTriage(reader, triageFile), reader));
+        }
+
+        // With nothing switched on, the game is not hooked at all.
+        if (observers.Count == 0)
+        {
+            return;
+        }
+
+        _harmony = new Harmony(MyPluginInfo.PLUGIN_GUID);
+        var (installed, total) = InteropFeed.Start(new HookInstaller(_harmony, Log), Log, observers);
+        Log.LogInfo($"Hooked the game's interop layer: {installed} of {total} hooks installed.");
     }
 
     public override bool Unload()
     {
-        // Hooks first: a hook that outlives the sink would fail on every game call.
+        // Hooks first: a hook that outlives its file would fail on every game call.
         _harmony?.UnpatchSelf();
-        _traceSink?.Dispose();
+        _files.ForEach(file => file.Dispose());
         return true;
     }
 
-    private void StartTrace(string filter)
+    private FileTraceSink? Open(string fileName, string feature)
     {
-        var path = Path.Combine(Paths.BepInExRootPath, TraceFileName);
+        var path = Path.Combine(Paths.BepInExRootPath, fileName);
         try
         {
-            _traceSink = new FileTraceSink(path, () => DateTime.Now);
+            var file = new FileTraceSink(path, () => DateTime.Now);
+            _files.Add(file);
+            Log.LogInfo($"{feature} started; writing {path}");
+            return file;
         }
         catch (Exception exception)
         {
-            Log.LogError($"Interop trace is off: cannot open {path}: {exception.Message}");
-            return;
+            Log.LogError($"{feature} is off: cannot open {path}: {exception.Message}");
+            return null;
         }
-
-        var session = new InteropTraceSession(TraceFilter.Parse(filter), _traceSink);
-        _harmony = new Harmony(MyPluginInfo.PLUGIN_GUID);
-        var (installed, total) = InteropTraceHooks.Install(new HookInstaller(_harmony, Log), session, Log);
-        Log.LogInfo($"Interop trace started with {installed} of {total} hooks; writing {path}");
     }
 }

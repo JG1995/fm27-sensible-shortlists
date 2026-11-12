@@ -4,14 +4,15 @@ A BepInEx plugin for Football Manager 27 that aims to make the shortlist a plain
 
 ## Status
 
-**Not usable for its purpose yet.** The research is done and the foundation is built. The feature that quiets the messages is not.
+**Not usable for its purpose yet.** The plugin can judge which inbox messages are shortlist noise and record its verdicts. It does not act on them yet.
 
 | Step | State |
 | ---- | ----- |
 | Is there a game setting for this? | Checked: no. See below. |
 | Can an add-on do it? | Yes in principle, through the game's UI interop layer. The exact mechanism needs data from a running game. |
-| Interop trace (the tool that gathers that data) | Built; not yet run in the game. |
-| Quiet shortlist | Not started. |
+| Interop trace (the tool that gathers that data) | Built and run in the game. |
+| Inbox triage (judging each message) | Built in observe mode; not yet run in the game. |
+| Quieting the judged messages | Not started. |
 
 ## What the game offers on its own
 
@@ -57,6 +58,7 @@ The plugin writes `BepInEx/config/fm27.sensibleshortlists.cfg` the first time it
 
 | Section | Setting | Default | Meaning |
 | ------- | ------- | ------- | ------- |
+| `QuietShortlist` | `Mode` | `Off` | `Observe` judges each inbox message and records the verdict to `BepInEx/SensibleShortlists.triage.log`. It changes nothing in the game. |
 | `Diagnostics` | `TraceInterop` | `false` | Record what the UI sends to and receives from the simulation, to `BepInEx/SensibleShortlists.trace.log`. For development; leave off for normal play. |
 | `Diagnostics` | `TraceFilter` | `shortlist,message,news,portal` | Comma-separated terms. A property channel is traced when its label contains one of them. Empty traces everything. |
 
