@@ -46,6 +46,15 @@ public class EmbeddedTextTests
     }
 
     [Fact]
+    public void A_stray_link_edge_does_not_swallow_the_link_after_it()
+    {
+        var text = EmbeddedText.Parse($"Odd \u0001 text {GameText.Link(GameText.Player, "King")} signs");
+
+        Assert.Equal("Odd \u0001 text King signs", text.Plain);
+        Assert.Equal(new[] { new RecordLink(GameText.Player) }, text.Links);
+    }
+
+    [Fact]
     public void An_unfinished_link_is_left_in_the_text()
     {
         var text = EmbeddedText.Parse("Before \u0001abc");

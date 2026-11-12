@@ -29,6 +29,15 @@ public sealed record EmbeddedText(string Plain, IReadOnlyList<RecordLink> Links)
                 break;
             }
 
+            // An edge with another edge before its data ends does not open a link; the next one may.
+            var nextEdge = text.IndexOf(LinkEdge, start + 1);
+            if (nextEdge < dataEnd)
+            {
+                plain.Append(text, position, nextEdge - position);
+                position = nextEdge;
+                continue;
+            }
+
             plain.Append(text, position, start - position).Append(text, dataEnd + 1, end - dataEnd - 1);
             if (TryReadRecord(text.AsSpan(start + 1, dataEnd - start - 1), out var record))
             {

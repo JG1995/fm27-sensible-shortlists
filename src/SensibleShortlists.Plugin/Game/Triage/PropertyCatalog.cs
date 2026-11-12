@@ -23,6 +23,14 @@ internal sealed class PropertyCatalog
         if (!_byKind.TryGetValue(kind, out var properties))
         {
             properties = List(target);
+
+            // An object that lists nothing was probably asked too early. Ask the next one again.
+            if (properties.Count == 0)
+            {
+                property = default;
+                return false;
+            }
+
             _byKind[kind] = properties;
 
             // Written once per kind of object: the vocabulary the next rule or repair will need.
