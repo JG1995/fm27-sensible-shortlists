@@ -1,0 +1,25 @@
+<Project>
+
+  <PropertyGroup>
+    <TargetFramework>net6.0</TargetFramework>
+    <LangVersion>latest</LangVersion>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <Version>0.1.0</Version>
+  </PropertyGroup>
+
+  <!--
+    The plugin compiles against the Il2CppInterop assemblies BepInEx generates in the game folder.
+    They are derived from the game and cannot be redistributed, so they are not in this repository.
+    Override the location with the FM27_GAME_DIR environment variable or in Directory.Build.user.props.
+  -->
+  <Import Project="Directory.Build.user.props" Condition="Exists('Directory.Build.user.props')" />
+
+  <PropertyGroup>
+    <GameDir Condition="'$(GameDir)' == '' And '$(FM27_GAME_DIR)' != ''">$(FM27_GAME_DIR)</GameDir>
+    <GameDir Condition="'$(GameDir)' == ''">/mnt/c/Program Files (x86)/Steam/steamapps/common/Football Manager 27</GameDir>
+    <GameInteropDir>$(GameDir)/BepInEx/interop</GameInteropDir>
+  </PropertyGroup>
+
+</Project>
