@@ -7,3 +7,10 @@
 
 # Worktrees that Claude Code creates for parallel sessions
 .claude/worktrees/
+
+# .NET build output
+bin/
+obj/
+
+# Machine-specific build settings, such as the game install location
+Directory.Build.user.props
