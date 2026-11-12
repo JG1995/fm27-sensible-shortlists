@@ -18,7 +18,10 @@ fi
 dotnet build src/SensibleShortlists.Plugin --configuration Release --nologo --verbosity quiet
 
 mkdir -p "$plugin_dir"
-cp "$build_dir/SensibleShortlists.dll" "$build_dir/SensibleShortlists.Core.dll" "$plugin_dir/"
+if ! cp "$build_dir/SensibleShortlists.dll" "$build_dir/SensibleShortlists.Core.dll" "$plugin_dir/"; then
+  echo "Copy failed. If the game is running it holds the plugin files open: close it and deploy again." >&2
+  exit 1
+fi
 
 echo "Deployed to $plugin_dir"
 echo "Restart the game to load it."

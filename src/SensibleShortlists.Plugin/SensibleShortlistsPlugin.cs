@@ -13,6 +13,7 @@ public sealed class SensibleShortlistsPlugin : BasePlugin
     private const string TraceFileName = "SensibleShortlists.trace.log";
 
     private FileTraceSink? _traceSink;
+    private Harmony? _harmony;
 
     public override void Load()
     {
@@ -39,6 +40,8 @@ public sealed class SensibleShortlistsPlugin : BasePlugin
 
     public override bool Unload()
     {
+        // Hooks first: a hook that outlives the sink would fail on every game call.
+        _harmony?.UnpatchSelf();
         _traceSink?.Dispose();
         return true;
     }
@@ -57,8 +60,8 @@ public sealed class SensibleShortlistsPlugin : BasePlugin
         }
 
         var session = new InteropTraceSession(TraceFilter.Parse(filter), _traceSink);
-        var hooks = new HookInstaller(new Harmony(MyPluginInfo.PLUGIN_GUID), Log);
-        var installed = InteropTraceHooks.Install(hooks, session, Log);
-        Log.LogInfo($"Interop trace started with {installed} of {InteropTraceHooks.Count} hooks; writing {path}");
+        _harmony = new Harmony(MyPluginInfo.PLUGIN_GUID);
+        var (installed, total) = InteropTraceHooks.Install(new HookInstaller(_harmony, Log), session, Log);
+        Log.LogInfo($"Interop trace started with {installed} of {total} hooks; writing {path}");
     }
 }

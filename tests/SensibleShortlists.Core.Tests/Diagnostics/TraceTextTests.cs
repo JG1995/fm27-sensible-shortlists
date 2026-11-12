@@ -35,6 +35,22 @@ public class TraceTextTests
     }
 
     [Fact]
+    public void The_limit_counts_the_original_characters_not_the_escapes()
+    {
+        var text = new string('x', TraceText.MaxLength - 1) + "\n";
+
+        Assert.Equal(new string('x', TraceText.MaxLength - 1) + @"\n", TraceText.Sanitize(text));
+    }
+
+    [Fact]
+    public void A_cut_never_splits_a_surrogate_pair()
+    {
+        var text = new string('x', TraceText.MaxLength - 1) + "\U0001F600" + "yy";
+
+        Assert.Equal(new string('x', TraceText.MaxLength - 1) + "…(+4)", TraceText.Sanitize(text));
+    }
+
+    [Fact]
     public void Describe_returns_the_description()
     {
         Assert.Equal("Int32:4", TraceText.Describe(4, number => $"Int32:{number}"));

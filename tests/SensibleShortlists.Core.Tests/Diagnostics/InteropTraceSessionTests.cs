@@ -44,6 +44,31 @@ public class InteropTraceSessionTests
     }
 
     [Fact]
+    public void A_missing_reference_or_property_is_marked_in_the_label()
+    {
+        Session(filter: "").ChannelOpened(42, null, null);
+
+        Assert.Equal(new[] { "CHANNEL key=42 <null>.<null>" }, _sink.Lines);
+    }
+
+    [Fact]
+    public void A_value_is_described_outside_the_sessions_lock()
+    {
+        var session = Session();
+        session.ChannelOpened(42, "PersonReference[1:2]", "HumanShortlists");
+        _sink.Lines.Clear();
+
+        // Describing calls into the game, which may re-enter the session from another thread.
+        session.ValueChanged(42, session, inner =>
+        {
+            var other = Task.Run(() => inner.EventSent("Nested", 1, null, null));
+            return other.Wait(TimeSpan.FromSeconds(5)) ? "described" : "deadlocked";
+        });
+
+        Assert.Equal("VALUE key=42 PersonReference[1:2].HumanShortlists = described", _sink.Lines.Last());
+    }
+
+    [Fact]
     public void A_value_for_a_traced_channel_is_recorded_with_the_channels_label()
     {
         var session = Session();

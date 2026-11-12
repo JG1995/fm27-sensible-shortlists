@@ -12,10 +12,16 @@ public static class TraceText
             return "<null>";
         }
 
-        var escaped = text.Replace("\r", @"\r").Replace("\n", @"\n").Replace("\t", @"\t");
-        return escaped.Length <= MaxLength
-            ? escaped
-            : $"{escaped[..MaxLength]}…(+{escaped.Length - MaxLength})";
+        // The limit applies to the text itself, so escaping can never push a short text over it,
+        // and the cut never lands inside an escape or a surrogate pair.
+        var kept = Math.Min(text.Length, MaxLength);
+        if (kept < text.Length && char.IsHighSurrogate(text[kept - 1]))
+        {
+            kept--;
+        }
+
+        var escaped = text[..kept].Replace("\r", @"\r").Replace("\n", @"\n").Replace("\t", @"\t");
+        return kept == text.Length ? escaped : $"{escaped}…(+{text.Length - kept})";
     }
 
     /// <summary>

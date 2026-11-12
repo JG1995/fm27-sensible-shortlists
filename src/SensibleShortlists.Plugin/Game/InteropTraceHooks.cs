@@ -15,14 +15,12 @@ namespace SensibleShortlists.Plugin.Game;
 /// </summary>
 internal static class InteropTraceHooks
 {
-    public const int Count = 4;
-
     private static readonly FirstFailureGate Failures = new();
 
     private static InteropTraceSession? s_session;
     private static ManualLogSource? s_log;
 
-    public static int Install(HookInstaller hooks, InteropTraceSession session, ManualLogSource log)
+    public static (int Installed, int Total) Install(HookInstaller hooks, InteropTraceSession session, ManualLogSource log)
     {
         s_session = session;
         s_log = log;
@@ -51,7 +49,7 @@ internal static class InteropTraceHooks
                 typeof(Bindings), nameof(Bindings.SetPrefetched), setValueParameters, Hook(nameof(OnSetValue))),
         };
 
-        return installed.Count(wasInstalled => wasInstalled);
+        return (installed.Count(wasInstalled => wasInstalled), installed.Length);
     }
 
     private static MethodInfo Hook(string name) =>
@@ -87,7 +85,7 @@ internal static class InteropTraceHooks
     {
         try
         {
-            s_session!.ValueChanged(GameDescriber.KeyNumber(ref __0), __1, GameDescriber.Value);
+            s_session!.ValueChanged(GameDescriber.KeyNumber(ref __0), __1, static value => GameDescriber.Value(value));
         }
         catch (Exception exception)
         {
