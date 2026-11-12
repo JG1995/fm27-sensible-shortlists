@@ -19,15 +19,16 @@ internal static class GameDescriber
     private const int MaxListItems = 30;
 
     /// <summary>Names come from the game's own enums, so they follow the game when it updates.</summary>
-    public static string EventName(uint number)
-    {
-        if (Enum.IsDefined(typeof(InteropEventIDs), number))
+    public static string? EventName(uint number) =>
+        TraceText.Describe(number, static n =>
         {
-            return ((InteropEventIDs)number).ToString();
-        }
+            if (Enum.IsDefined(typeof(InteropEventIDs), n))
+            {
+                return ((InteropEventIDs)n).ToString();
+            }
 
-        return Enum.IsDefined(typeof(ActionID), number) ? ((ActionID)number).ToString() : "?";
-    }
+            return Enum.IsDefined(typeof(ActionID), n) ? ((ActionID)n).ToString() : "?";
+        });
 
     /// <summary>A binding key is one 64-bit number in a struct; reading it directly avoids a native call.</summary>
     public static ulong KeyNumber(ref Bindings.Key key) => Unsafe.As<Bindings.Key, ulong>(ref key);

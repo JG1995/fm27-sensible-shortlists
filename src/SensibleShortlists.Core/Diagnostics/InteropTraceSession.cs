@@ -1,3 +1,5 @@
+using System.Collections.Concurrent;
+
 namespace SensibleShortlists.Core.Diagnostics;
 
 /// <summary>
@@ -11,7 +13,7 @@ public sealed class InteropTraceSession
     private readonly TraceFilter _filter;
     private readonly ITraceSink _sink;
     private readonly int _channelCapacity;
-    private readonly Dictionary<ulong, string> _tracedChannels = new();
+    private readonly ConcurrentDictionary<ulong, string> _tracedChannels = new();
     private readonly object _gate = new();
 
     public InteropTraceSession(
@@ -25,18 +27,18 @@ public sealed class InteropTraceSession
     }
 
     /// <summary>Events are rare and each one is a user action, so the filter does not apply.</summary>
-    public void EventSent(string name, uint number, string? target, string? data)
+    public void EventSent(string? name, uint number, string? target, string? data)
     {
         lock (_gate)
         {
             _sink.Write(
-                $"EVENT {name}({number}) target={TraceText.Sanitize(target)} data={TraceText.Sanitize(data)}");
+                $"EVENT {TraceText.Sanitize(name)}({number}) target={TraceText.Sanitize(target)} data={TraceText.Sanitize(data)}");
         }
     }
 
     public void ChannelOpened(ulong key, string? reference, string? property)
     {
-        var label = TraceText.Sanitize($"{reference}.{property}");
+        var label = $"{TraceText.Sanitize(reference)}.{TraceText.Sanitize(property)}";
         if (!_filter.Matches(label))
         {
             return;
@@ -60,18 +62,21 @@ public sealed class InteropTraceSession
     /// <summary>
     /// Values arrive for every bound property in the game, thousands per screen. The description is
     /// only computed for traced channels, and the value is passed as state so callers can use a
-    /// static describer: the common case costs one dictionary lookup and no allocation.
+    /// static describer: the common case costs one lock-free lookup and no allocation.
     /// </summary>
     public void ValueChanged<TValue>(ulong key, TValue value, Func<TValue, string?> describe)
     {
+        if (!_tracedChannels.TryGetValue(key, out var label))
+        {
+            return;
+        }
+
+        // Describing reads game objects. That must happen outside the lock: the game may answer by
+        // calling back into a hook on another thread, which would then wait on this one forever.
+        var description = TraceText.Sanitize(TraceText.Describe(value, describe));
         lock (_gate)
         {
-            if (!_tracedChannels.TryGetValue(key, out var label))
-            {
-                return;
-            }
-
-            _sink.Write($"VALUE key={key} {label} = {TraceText.Sanitize(TraceText.Describe(value, describe))}");
+            _sink.Write($"VALUE key={key} {label} = {description}");
         }
     }
 }
