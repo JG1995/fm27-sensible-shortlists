@@ -126,10 +126,25 @@ public sealed class InboxTriage
 
     private static string Show(bool? fact) => fact?.ToString() ?? "?";
 
-    // The club records in an answer. A value that is not a game object holds none, which is how
-    // the game answers for a person without a club.
-    private static IEnumerable<uint> ClubsIn(GameValue value) =>
-        (value.Records ?? Array.Empty<uint>()).Where(record => new RecordLink(record).IsClub);
+    // The game prints its "no object" value as this type's name. It is how a person without a club
+    // is answered for.
+    private const string NoObject = "NullReference";
+
+    /// <summary>
+    /// The club records in an answer: empty when the game says there is no club, null when the
+    /// answer is anything else. An answer in a shape the plugin does not know must not be taken
+    /// for "no club": that would let one of the manager's own players pass for a stranger.
+    /// </summary>
+    private static IReadOnlyList<uint>? ClubsIn(GameValue value)
+    {
+        var clubs = (value.Records ?? Array.Empty<uint>()).Where(record => new RecordLink(record).IsClub).ToArray();
+        if (clubs.Length > 0)
+        {
+            return clubs;
+        }
+
+        return value.Records is null && value.Text?.EndsWith(NoObject, StringComparison.Ordinal) == true ? clubs : null;
+    }
 
     /// <summary>The manager's club as it stands for one listing.</summary>
     private sealed class ManagerClubRead
@@ -148,7 +163,7 @@ public sealed class InboxTriage
 
         public void Start() => _triage._game.ReadPerson(_manager, ManagerClubProperty, value =>
         {
-            _club = value is null ? null : ClubsIn(value).Cast<uint?>().FirstOrDefault();
+            _club = value is null ? null : ClubsIn(value)?.Cast<uint?>().FirstOrDefault();
             _done = true;
             _triage._log.Write(_club is { } club ? $"CLUB {new RecordLink(club)}" : "CLUB ?");
             foreach (var use in _waiting)
@@ -234,13 +249,13 @@ public sealed class InboxTriage
                     _triage._game.ReadPerson(person, property, value =>
                     {
                         // One unreadable answer makes the person's clubs unreadable, whatever the other says.
-                        if (value is null)
+                        if (value is not null && ClubsIn(value) is { } found)
                         {
-                            _clubs[person] = null;
+                            clubs.UnionWith(found);
                         }
                         else
                         {
-                            clubs.UnionWith(ClubsIn(value));
+                            _clubs[person] = null;
                         }
 
                         Answered();
