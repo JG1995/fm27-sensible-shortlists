@@ -85,6 +85,14 @@ internal static class GameReferences
             ? number
             : null;
 
+    /// <summary>True when both values hold a game object, and both objects belong to the same running game.</summary>
+    public static bool SameGame(TypedValue one, TypedValue other) =>
+        one.Get()?.TryCast<InteropReference>() is { } first
+        && other.Get()?.TryCast<InteropReference>() is { } second
+        && first.TryGetValue(GameKey, out var firstGame)
+        && second.TryGetValue(GameKey, out var secondGame)
+        && firstGame == secondGame;
+
     /// <summary>
     /// The items of a list value, each still wrapped as the game delivered it. Null when the value
     /// is not a list, or holds an item that is not a value.

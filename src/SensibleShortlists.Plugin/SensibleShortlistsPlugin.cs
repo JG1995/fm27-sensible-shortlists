@@ -73,7 +73,7 @@ public sealed class SensibleShortlistsPlugin : BasePlugin
         {
             var reader = new ChannelReader(new PropertyCatalog(triageFile), triageFile);
             var commands = new GameCommands();
-            var visibility = triageMode == TriageMode.Hide ? new MessageVisibility(HeldBackFor, Clock()) : null;
+            var visibility = triageMode.Hides() ? new MessageVisibility(HeldBackFor, Clock()) : null;
             observers.Add(new TriageObserver(
                 new InboxTriage(reader, commands, triageFile, triageMode, visibility), reader, commands));
 

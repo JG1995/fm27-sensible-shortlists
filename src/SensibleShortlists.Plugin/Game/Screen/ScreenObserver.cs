@@ -112,8 +112,7 @@ internal sealed class ScreenObserver : IInteropObserver
                 return _screen.PositionDelivered(key, position) is { } moved ? ScreenValues.Position(moved) : null;
 
             default:
-                // Not what the channel carries. What was delivered on it before no longer stands.
-                _screen.Forget(key);
+                _screen.NotUnderstood(key);
                 return null;
         }
     }
