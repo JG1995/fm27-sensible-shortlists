@@ -58,42 +58,56 @@ public class InboxTriageTests
     }
 
     [Fact]
-    public void Each_person_a_judged_message_links_is_asked_for_their_status_once_and_it_is_recorded()
+    public void Each_person_a_judged_message_links_is_asked_every_candidate_property_once()
     {
         _triage.ManagerTeamSeen(GameText.ManagerTeam);
         List(1, 2);
         AnswerFacts(1, NoiseTitle);
         AnswerFacts(2, NoiseTitle);
         AnswerShortlist(GameText.Player);
+
+        Assert.Equal(
+            new[]
+            {
+                "PlayerStatusFlagsForTeam", "PlayerStatusFlagsForRecruitment", "PlayerStatus", "DaysLeftOnShortlist",
+                "IsShortlisted", "IsBeingScouted", "PersonIsTransferTarget",
+            },
+            _game.PropertiesAskedOf(GameText.Player));
+    }
+
+    [Fact]
+    public void An_answer_about_a_person_is_recorded_as_the_games_text_or_as_the_flags_it_holds()
+    {
+        List(1);
+        AnswerFacts(1, NoiseTitle);
         _lines.Clear();
 
-        _game.Answer(GameText.Player, "PlayerStatusFlagsForTeam", new GameValue("flags"));
+        _game.Answer(GameText.Player, "DaysLeftOnShortlist", new GameValue("27"));
+        _game.Answer(
+            GameText.Player,
+            "PlayerStatusFlagsForRecruitment",
+            new GameValue("List`1", Flags: new[] { "IsOnHumanShortlist", "Scouted" }));
+        _game.Answer(GameText.Player, "PlayerStatus", new GameValue("List`1", Flags: Array.Empty<string>()));
 
-        Assert.Equal(1, _game.ReadsOf(GameText.Player));
-        Assert.Equal((GameText.Player, GameText.ManagerTeam), _game.StatusAskedOf);
-        Assert.Equal(new[] { "PERSON 1:155126 status=flags" }, _lines);
+        Assert.Equal(
+            new[]
+            {
+                "PERSON 1:155126 DaysLeftOnShortlist=27",
+                "PERSON 1:155126 PlayerStatusFlagsForRecruitment=[IsOnHumanShortlist,Scouted]",
+                "PERSON 1:155126 PlayerStatus=[]",
+            },
+            _lines);
     }
 
     [Fact]
-    public void A_status_that_cannot_be_read_is_recorded_as_a_question_mark()
-    {
-        _triage.ManagerTeamSeen(GameText.ManagerTeam);
-        List(1);
-        AnswerFacts(1, NoiseTitle);
-        AnswerShortlist();
-
-        _game.Answer(GameText.Player, "PlayerStatusFlagsForTeam", null);
-
-        Assert.Equal("PERSON 1:155126 status=?", _lines.Last());
-    }
-
-    [Fact]
-    public void Without_the_managers_team_no_status_is_asked()
+    public void An_answer_about_a_person_that_cannot_be_read_is_recorded_as_a_question_mark()
     {
         List(1);
         AnswerFacts(1, NoiseTitle);
 
-        Assert.Equal(0, _game.ReadsOf(GameText.Player));
+        _game.Answer(GameText.Player, "IsShortlisted", null);
+
+        Assert.Equal("PERSON 1:155126 IsShortlisted=?", _lines.Last());
     }
 
     [Fact]
@@ -314,15 +328,13 @@ public class InboxTriageTests
         private static readonly object NoImmediateAnswer = new();
 
         private readonly List<(object Target, string Property, Action<GameValue?> OnValue)> _waiting = new();
-        private readonly List<object> _asked = new();
+        private readonly List<(object Target, string Property)> _asked = new();
 
         public object? AnswerImmediatelyWith { get; set; } = NoImmediateAnswer;
 
         public int ReadCount => _asked.Count;
 
         public (uint Manager, uint Team)? ShortlistAskedOf { get; private set; }
-
-        public (uint Person, uint Team)? StatusAskedOf { get; private set; }
 
         public void ReadMessage(object message, string property, Action<GameValue?> onValue) =>
             Read(message, property, onValue);
@@ -333,13 +345,13 @@ public class InboxTriageTests
             Read(Shortlist, property, onValue);
         }
 
-        public void ReadPersonInTeam(uint person, uint team, string property, Action<GameValue?> onValue)
-        {
-            StatusAskedOf = (person, team);
+        public void ReadPerson(uint person, string property, Action<GameValue?> onValue) =>
             Read(person, property, onValue);
-        }
 
-        public int ReadsOf(object target) => _asked.Count(asked => asked.Equals(target));
+        public int ReadsOf(object target) => _asked.Count(asked => asked.Target.Equals(target));
+
+        public IReadOnlyList<string> PropertiesAskedOf(object target) =>
+            _asked.Where(asked => asked.Target.Equals(target)).Select(asked => asked.Property).ToList();
 
         public void Answer(object target, string property, GameValue? value)
         {
@@ -352,7 +364,7 @@ public class InboxTriageTests
 
         private void Read(object target, string property, Action<GameValue?> onValue)
         {
-            _asked.Add(target);
+            _asked.Add((target, property));
             if (!ReferenceEquals(AnswerImmediatelyWith, NoImmediateAnswer))
             {
                 onValue((GameValue?)AnswerImmediatelyWith);

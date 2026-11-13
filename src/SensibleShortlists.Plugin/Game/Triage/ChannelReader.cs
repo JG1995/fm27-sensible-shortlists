@@ -25,13 +25,6 @@ internal sealed class ChannelReader : IGameReader
     // The game answers its own UI within a tick or two.
     private static readonly TimeSpan Patience = TimeSpan.FromSeconds(15);
 
-    // How a team context reaches the simulation is not known yet. Until a live run shows it, a read
-    // in the context of a team tries every form that is safe to try: no context, and the team
-    // carried on the person's reference under a key the game is seen to use for a context or a team
-    // elsewhere. This is a probe, and it is the one place the adapter chooses between forms; once a
-    // live run shows the right one, the others go.
-    private static readonly string?[] TeamContextCodes = { null, "ctxt", "Ttea", "team" };
-
     // Keys the UI uses are hashes of binding paths. The plugin counts up from a fixed start instead.
     private const ulong FirstKey = 0x5353_4C52_0000_0000;
 
@@ -43,7 +36,6 @@ internal sealed class ChannelReader : IGameReader
     private readonly List<ulong> _finished = new();
     private readonly List<ulong> _nodesOnly = new();
     private ulong _nextKey = FirstKey;
-    private bool _contextsNoted;
 
     public ChannelReader(PropertyCatalog properties, ITraceSink log)
     {
@@ -75,7 +67,10 @@ internal sealed class ChannelReader : IGameReader
             },
             onValue));
 
-    public void ReadPersonInTeam(uint person, uint team, string property, Action<GameValue?> onValue) =>
+    // A person's own reference is enough: in the session of 2026-11-13 the game answered a read on
+    // it the same whether or not the manager's team rode along, and the same as it answered its
+    // own screens for 14 of the 15 people both asked about.
+    public void ReadPerson(uint person, string property, Action<GameValue?> onValue) =>
         _queue.Enqueue((
             interop =>
             {
@@ -85,67 +80,9 @@ internal sealed class ChannelReader : IGameReader
                     return;
                 }
 
-                // Every form is tried and every answer recorded, so one session shows which form
-                // works. Whoever asked gets the first form, in order, that answered with something.
-                var answers = new GameValue?[TeamContextCodes.Length];
-                var waitingFor = answers.Length;
-                for (var i = 0; i < TeamContextCodes.Length; i++)
-                {
-                    var form = i;
-                    var label = TeamContextCodes[i] ?? "no context";
-
-                    void Answered(GameValue? value)
-                    {
-                        var empty = value is null || (string.IsNullOrEmpty(value.Text) && value.Records is null);
-                        answers[form] = empty ? null : value! with { Text = $"[{label}] {value.Text}" };
-                        _log.Write($"NOTE status of {person} as [{label}]: {(empty ? "nothing" : value!.Text)}");
-                        if (--waitingFor == 0)
-                        {
-                            onValue(answers.FirstOrDefault(answer => answer is not null));
-                        }
-                    }
-
-                    try
-                    {
-                        var reference = GameReferences.Person(person, game, TeamContextCodes[i], team);
-                        NoteContextsOnce(reference, property);
-                        Open(interop, reference, property, Answered);
-                    }
-                    catch (Exception exception)
-                    {
-                        InteropFeed.ReportFirstFailure($"{nameof(ChannelReader)}.{nameof(ReadPersonInTeam)}", exception);
-                        Answered(null);
-                    }
-                }
+                Open(interop, GameReferences.Person(person, game), property, onValue);
             },
             onValue));
-
-    // What the game itself says a property needs. Written once, for whoever works out the context.
-    private void NoteContextsOnce(InteropReference reference, string property)
-    {
-        if (_contextsNoted || !_properties.TryFind(reference, property, out var id))
-        {
-            return;
-        }
-
-        _contextsNoted = true;
-        try
-        {
-            var contexts = new Il2CppSystem.Collections.Generic.List<ContextID>();
-            reference.GetContexts(id.id, contexts);
-            var names = new List<string>();
-            for (var i = 0; i < contexts.Count; i++)
-            {
-                names.Add($"{GameReferences.CodeName(contexts[i].id)}:{contexts[i].id}");
-            }
-
-            _log.Write($"NOTE contexts of {property}: {(names.Count == 0 ? "none" : string.Join(" ", names))}");
-        }
-        catch (Exception exception)
-        {
-            _log.Write($"NOTE contexts of {property}: <error: {exception.GetType().Name}>");
-        }
-    }
 
     /// <summary>Makes the queued calls into the game. Called on the game's tick.</summary>
     public void Flush()
@@ -223,17 +160,19 @@ internal sealed class ChannelReader : IGameReader
         // whose records cannot be read still gives its text.
         string? text = null;
         IReadOnlyList<uint>? records = null;
+        IReadOnlyList<string>? flags = null;
         try
         {
             text = value?.AsString();
             records = value is null ? null : GameReferences.Records(value);
+            flags = value is null ? null : GameReferences.StatusFlags(value);
         }
         catch (Exception exception)
         {
             InteropFeed.ReportFirstFailure(nameof(ChannelReader), exception);
         }
 
-        return _waiting.Answer(key, text is null ? null : new GameValue(text, records));
+        return _waiting.Answer(key, text is null ? null : new GameValue(text, records, flags));
     }
 
     private void Open(GameInteropSubsystem interop, InteropReference target, string property, Action<GameValue?> onValue)
