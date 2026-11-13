@@ -1,4 +1,5 @@
 using FM.GamePlugin;
+using SensibleShortlists.Core.Diagnostics;
 using SensibleShortlists.Core.Triage;
 using SensibleShortlists.Plugin.Game.Hooks;
 using SI.Core;
@@ -7,9 +8,9 @@ using SI.Interop;
 namespace SensibleShortlists.Plugin.Game.Triage;
 
 /// <summary>
-/// Reads properties from the game the way its own UI does: open a channel for one property of one
-/// object under a key of the plugin's own, take the first value the game sends for that key, and
-/// close the channel.
+/// Reads properties from the game the way its own UI does: register a node under a key of the
+/// plugin's own, open a channel on it for one property of one object, take the first value the
+/// game sends for that key, then close the channel and remove the node.
 /// </summary>
 /// <remarks>
 /// Reads are queued and made on the game's tick, a few at a time. A read asked for from inside a
@@ -20,16 +21,24 @@ internal sealed class ChannelReader : IGameReader
 {
     private const int ReadsPerTick = 48;
 
+    // About fifteen seconds at sixty ticks a second. The game answers its own UI within a tick or two.
+    private const int PatienceInTicks = 900;
+
     // Keys the UI uses are hashes of binding paths. The plugin counts up from a fixed start instead.
     private const ulong FirstKey = 0x5353_4C52_0000_0000;
 
     private readonly PropertyCatalog _properties;
-    private readonly Queue<(Action<GameInteropSubsystem> Call, Action<GameValue?>? OnValue)> _queue = new();
-    private readonly Dictionary<ulong, Action<GameValue?>> _waiting = new();
+    private readonly ITraceSink _log;
+    private readonly Queue<(Action<GameInteropSubsystem> Call, Action<GameValue?> OnValue)> _queue = new();
+    private readonly ReadLedger _waiting = new(PatienceInTicks);
+    private readonly List<ulong> _finished = new();
     private ulong _nextKey = FirstKey;
-    private readonly List<ulong> _answered = new();
 
-    public ChannelReader(PropertyCatalog properties) => _properties = properties;
+    public ChannelReader(PropertyCatalog properties, ITraceSink log)
+    {
+        _properties = properties;
+        _log = log;
+    }
 
     /// <summary>The running game's identifier, needed to refer to a person in it.</summary>
     public int? Game { get; set; }
@@ -57,19 +66,27 @@ internal sealed class ChannelReader : IGameReader
     /// <summary>Makes the queued calls into the game. Called on the game's tick.</summary>
     public void Flush()
     {
-        if ((_queue.Count == 0 && _answered.Count == 0)
+        var givenUp = _waiting.Tick();
+        if (givenUp.Count > 0)
+        {
+            _finished.AddRange(givenUp);
+            _log.Write($"NOTE the game did not answer {givenUp.Count} reads; they count as unreadable");
+        }
+
+        if ((_queue.Count == 0 && _finished.Count == 0)
             || !GameSubsystems.TryGet<GameInteropSubsystem>(out var interop))
         {
             return;
         }
 
-        // Closing answered channels is not rationed: it only gives back what the plugin took.
-        foreach (var key in _answered)
+        // Giving back what the plugin took is not rationed.
+        foreach (var key in _finished)
         {
             interop.CloseChannel(GameReferences.Key(key));
+            interop.RemoveNode(GameReferences.Key(key));
         }
 
-        _answered.Clear();
+        _finished.Clear();
 
         for (var made = 0; made < ReadsPerTick && _queue.TryDequeue(out var queued); made++)
         {
@@ -81,7 +98,7 @@ internal sealed class ChannelReader : IGameReader
             catch (Exception exception)
             {
                 InteropFeed.ReportFirstFailure(nameof(ChannelReader), exception);
-                queued.OnValue?.Invoke(null);
+                queued.OnValue(null);
             }
         }
     }
@@ -89,13 +106,14 @@ internal sealed class ChannelReader : IGameReader
     /// <summary>Takes a delivered value if it answers one of the plugin's reads.</summary>
     public bool TryDeliver(ulong key, TypedValue? value)
     {
-        if (!_waiting.Remove(key, out var onValue))
+        if (!_waiting.IsExpected(key))
         {
             return false;
         }
 
-        _answered.Add(key);
-        // Whatever goes wrong reading the value, whoever asked still gets an answer.
+        _finished.Add(key);
+
+        // Whatever goes wrong printing the value, whoever asked still gets an answer.
         string? text = null;
         try
         {
@@ -106,8 +124,7 @@ internal sealed class ChannelReader : IGameReader
             InteropFeed.ReportFirstFailure(nameof(ChannelReader), exception);
         }
 
-        onValue(text is null ? null : new GameValue(text));
-        return true;
+        return _waiting.Answer(key, text is null ? null : new GameValue(text));
     }
 
     private void Open(GameInteropSubsystem interop, InteropReference target, string property, Action<GameValue?> onValue)
@@ -118,16 +135,21 @@ internal sealed class ChannelReader : IGameReader
             return;
         }
 
+        // The simulation answers a channel only on a node it knows. The game's UI registers every
+        // binding as a node before opening a channel on it; a node at the root has no parent.
         var key = _nextKey++;
-        _waiting[key] = onValue;
         try
         {
+            interop.AddNode(GameReferences.Key(key), default, id);
             interop.OpenChannel(target, id, GameReferences.Key(key));
         }
         catch
         {
-            _waiting.Remove(key);
+            // Whatever was registered before the failure is given back on the next tick.
+            _finished.Add(key);
             throw;
         }
+
+        _waiting.Expect(key, onValue);
     }
 }

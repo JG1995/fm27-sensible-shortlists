@@ -50,7 +50,7 @@ public sealed class SensibleShortlistsPlugin : BasePlugin
 
         if (TriageModes.Parse(mode.Value) == TriageMode.Observe && Open(TriageFileName, "Inbox triage") is { } triageFile)
         {
-            var reader = new ChannelReader(new PropertyCatalog(triageFile));
+            var reader = new ChannelReader(new PropertyCatalog(triageFile), triageFile);
             observers.Add(new TriageObserver(new InboxTriage(reader, triageFile), reader));
         }
 
