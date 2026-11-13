@@ -58,6 +58,45 @@ public class InboxTriageTests
     }
 
     [Fact]
+    public void Each_person_a_judged_message_links_is_asked_for_their_status_once_and_it_is_recorded()
+    {
+        _triage.ManagerTeamSeen(GameText.ManagerTeam);
+        List(1, 2);
+        AnswerFacts(1, NoiseTitle);
+        AnswerFacts(2, NoiseTitle);
+        AnswerShortlist(GameText.Player);
+        _lines.Clear();
+
+        _game.Answer(GameText.Player, "PlayerStatusFlagsForTeam", new GameValue("flags"));
+
+        Assert.Equal(1, _game.ReadsOf(GameText.Player));
+        Assert.Equal((GameText.Player, GameText.ManagerTeam), _game.StatusAskedOf);
+        Assert.Equal(new[] { "PERSON 1:155126 status=flags" }, _lines);
+    }
+
+    [Fact]
+    public void A_status_that_cannot_be_read_is_recorded_as_a_question_mark()
+    {
+        _triage.ManagerTeamSeen(GameText.ManagerTeam);
+        List(1);
+        AnswerFacts(1, NoiseTitle);
+        AnswerShortlist();
+
+        _game.Answer(GameText.Player, "PlayerStatusFlagsForTeam", null);
+
+        Assert.Equal("PERSON 1:155126 status=?", _lines.Last());
+    }
+
+    [Fact]
+    public void Without_the_managers_team_no_status_is_asked()
+    {
+        List(1);
+        AnswerFacts(1, NoiseTitle);
+
+        Assert.Equal(0, _game.ReadsOf(GameText.Player));
+    }
+
+    [Fact]
     public void The_shortlist_is_asked_of_the_manager_and_team_the_listing_belongs_to()
     {
         _triage.ManagerTeamSeen(GameText.ManagerTeam);
@@ -283,6 +322,8 @@ public class InboxTriageTests
 
         public (uint Manager, uint Team)? ShortlistAskedOf { get; private set; }
 
+        public (uint Person, uint Team)? StatusAskedOf { get; private set; }
+
         public void ReadMessage(object message, string property, Action<GameValue?> onValue) =>
             Read(message, property, onValue);
 
@@ -290,6 +331,12 @@ public class InboxTriageTests
         {
             ShortlistAskedOf = (manager, team);
             Read(Shortlist, property, onValue);
+        }
+
+        public void ReadPersonInTeam(uint person, uint team, string property, Action<GameValue?> onValue)
+        {
+            StatusAskedOf = (person, team);
+            Read(person, property, onValue);
         }
 
         public int ReadsOf(object target) => _asked.Count(asked => asked.Equals(target));

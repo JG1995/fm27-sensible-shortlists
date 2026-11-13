@@ -22,9 +22,14 @@ public sealed class InboxTriage
     private const string IsShortlistProperty = "PersonSearchIsShortlist";
     private const string PeopleProperty = "PersonList";
 
+    // The flags the game shows on a player's banner. One of them says the player is on a shortlist
+    // of the manager's, whichever shortlist that is, which the Shortlist screen's list cannot say.
+    private const string StatusProperty = "PlayerStatusFlagsForTeam";
+
     private readonly IGameReader _game;
     private readonly ITraceSink _log;
     private readonly HashSet<long> _started = new();
+    private readonly HashSet<uint> _statusAsked = new();
     private uint? _managerTeam;
     private long? _runningGame;
 
@@ -52,6 +57,7 @@ public sealed class InboxTriage
         if (_runningGame is { } known && known != listing.Game)
         {
             _started.Clear();
+            _statusAsked.Clear();
             _managerTeam = null;
             _log.Write($"NOTE game {listing.Game}");
         }
@@ -83,6 +89,23 @@ public sealed class InboxTriage
         _log.Write(
             $"MESSAGE {facts.Id} {verdict} forwarded={Show(facts.Forwarded)} respond={Show(facts.CanRespond)} "
             + $"responded={Show(facts.Responded)} priority={Show(facts.Priority)} links={links} title={title}");
+        RecordStatusOfPeople(facts);
+    }
+
+    // Recorded beside the verdicts, not used in them yet: the way the plugin asks for a status in
+    // the context of a team is not confirmed, and a verdict must not rest on an unconfirmed read.
+    private void RecordStatusOfPeople(MessageFacts facts)
+    {
+        if (_managerTeam is not { } team)
+        {
+            return;
+        }
+
+        foreach (var person in facts.Links.Where(link => link.IsPerson && _statusAsked.Add(link.Record)))
+        {
+            _game.ReadPersonInTeam(person.Record, team, StatusProperty, value =>
+                _log.Write($"PERSON {person} status={(value?.Text is { } text ? TraceText.Sanitize(text) : "?")}"));
+        }
     }
 
     private static string Mark(MessageFacts facts, RecordLink link)

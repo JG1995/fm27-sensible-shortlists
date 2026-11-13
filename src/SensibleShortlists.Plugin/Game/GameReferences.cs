@@ -23,6 +23,9 @@ internal static class GameReferences
     private static readonly uint SearchTeamKey = Code("Ttea");
     private static readonly uint SearchTypeKey = Code("type");
 
+    // The kind every reference to a database record carries, person and team alike.
+    private const int DatabaseRecordKind = 28;
+
     // The kind a person-search reference carries, and the search type of the Shortlist screen.
     private const int PersonSearchKind = 73;
     private const int ShortlistSearchType = 0;
@@ -38,6 +41,35 @@ internal static class GameReferences
         record = unchecked((uint)value);
         return found;
     }
+
+    /// <summary>
+    /// A person in the running game, from the record a link points to, optionally carrying another
+    /// record under a key of its own, the way some of the game's references carry their context.
+    /// </summary>
+    public static InteropReference Person(uint record, int game, string? contextCode, uint context)
+    {
+        var pairs = new List<(uint Key, int Value)>
+        {
+            (KindKey, DatabaseRecordKind), (GameKey, game), (RecordKey, unchecked((int)record)),
+        };
+        if (contextCode is not null)
+        {
+            pairs.Add((Code(contextCode), unchecked((int)context)));
+        }
+
+        // The game's own references list their pairs in key order.
+        var ids = new Il2CppSystem.Collections.Generic.List<InteropReference.Pair>();
+        foreach (var (key, value) in pairs.OrderBy(pair => pair.Key))
+        {
+            ids.Add(new InteropReference.Pair { m_id = key, m_value = value });
+        }
+
+        return new PersonReference(ids);
+    }
+
+    /// <summary>A key or identifier as the four characters it is made of.</summary>
+    public static string CodeName(uint code) =>
+        new(new[] { (char)(code >> 24), (char)((code >> 16) & 0xFF), (char)((code >> 8) & 0xFF), (char)(code & 0xFF) });
 
     /// <summary>The object behind the Shortlist screen of one manager at one team.</summary>
     public static InteropReference Shortlist(uint manager, uint team, int game)

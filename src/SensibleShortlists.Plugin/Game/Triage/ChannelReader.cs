@@ -2,6 +2,7 @@ using FM.GamePlugin;
 using SensibleShortlists.Core.Diagnostics;
 using SensibleShortlists.Core.Triage;
 using SensibleShortlists.Plugin.Game.Hooks;
+using SI.Bindable.Reference.Core;
 using SI.Core;
 using SI.Interop;
 
@@ -24,6 +25,12 @@ internal sealed class ChannelReader : IGameReader
     // The game answers its own UI within a tick or two.
     private static readonly TimeSpan Patience = TimeSpan.FromSeconds(15);
 
+    // How a team context reaches the simulation is not known yet. Until a live run shows it, a read
+    // in the context of a team tries the forms that are safe to try, in this order: no context, then
+    // the team carried on the person's reference under a key the game is seen to use for a context
+    // or a team elsewhere. The answer says which form produced it.
+    private static readonly string?[] TeamContextCodes = { null, "ctxt", "Ttea", "team" };
+
     // Keys the UI uses are hashes of binding paths. The plugin counts up from a fixed start instead.
     private const ulong FirstKey = 0x5353_4C52_0000_0000;
 
@@ -35,6 +42,7 @@ internal sealed class ChannelReader : IGameReader
     private readonly List<ulong> _finished = new();
     private readonly List<ulong> _nodesOnly = new();
     private ulong _nextKey = FirstKey;
+    private bool _contextsNoted;
 
     public ChannelReader(PropertyCatalog properties, ITraceSink log)
     {
@@ -65,6 +73,63 @@ internal sealed class ChannelReader : IGameReader
                 Open(interop, GameReferences.Shortlist(manager, team, game), property, onValue);
             },
             onValue));
+
+    public void ReadPersonInTeam(uint person, uint team, string property, Action<GameValue?> onValue) =>
+        ReadPersonInTeam(person, team, property, attempt: 0, onValue);
+
+    private void ReadPersonInTeam(uint person, uint team, string property, int attempt, Action<GameValue?> onValue) =>
+        _queue.Enqueue((
+            interop =>
+            {
+                if (Game is not { } game)
+                {
+                    onValue(null);
+                    return;
+                }
+
+                var code = TeamContextCodes[attempt];
+                var reference = GameReferences.Person(person, game, code, team);
+                NoteContextsOnce(reference, property);
+                Open(interop, reference, property, value =>
+                {
+                    var empty = value is null || (string.IsNullOrEmpty(value.Text) && value.Records is null);
+                    if (empty && attempt + 1 < TeamContextCodes.Length)
+                    {
+                        ReadPersonInTeam(person, team, property, attempt + 1, onValue);
+                        return;
+                    }
+
+                    onValue(empty ? null : value! with { Text = $"[{code ?? "no context"}] {value.Text}" });
+                });
+            },
+            onValue));
+
+    // What the game itself says a property needs. Written once, for whoever works out the context.
+    private void NoteContextsOnce(InteropReference reference, string property)
+    {
+        if (_contextsNoted || !_properties.TryFind(reference, property, out var id))
+        {
+            return;
+        }
+
+        _contextsNoted = true;
+        try
+        {
+            var contexts = new Il2CppSystem.Collections.Generic.List<ContextID>();
+            reference.GetContexts(id.id, contexts);
+            var names = new List<string>();
+            for (var i = 0; i < contexts.Count; i++)
+            {
+                names.Add($"{GameReferences.CodeName(contexts[i].id)}:{contexts[i].id}");
+            }
+
+            _log.Write($"NOTE contexts of {property}: {(names.Count == 0 ? "none" : string.Join(" ", names))}");
+        }
+        catch (Exception exception)
+        {
+            _log.Write($"NOTE contexts of {property}: <error: {exception.GetType().Name}>");
+        }
+    }
 
     /// <summary>Makes the queued calls into the game. Called on the game's tick.</summary>
     public void Flush()
