@@ -318,8 +318,10 @@ public sealed class MessageScreen
 
     // The game's choice stands when it can be seen. Otherwise the message given before stands
     // while it can be seen: the inbox list changes with every search, and the message to open must
-    // not follow it around. Only then is the first shown message of the inbox offered, and when
-    // the inbox shows nothing, the game's choice stands after all.
+    // not follow it around. Only then is the newest message of the inbox that can be seen offered.
+    // While a newer one still awaits its verdict the choice waits with it, or a message kept a
+    // moment later would be passed over for an older one. When the inbox shows nothing, the
+    // game's choice stands after all.
     private long MessageToOpen(long named, long given)
     {
         if (_visibility.IsShown(named))
@@ -327,9 +329,30 @@ public sealed class MessageScreen
             return named;
         }
 
-        return given != named && _visibility.IsShown(given)
-            ? given
-            : _inbox.FirstOrDefault(message => message is { } number && _visibility.IsShown(number)) ?? named;
+        if (given != named && _visibility.IsShown(given))
+        {
+            return given;
+        }
+
+        foreach (var message in _inbox)
+        {
+            if (message is not { } number)
+            {
+                continue;
+            }
+
+            if (_visibility.IsHeldBack(number))
+            {
+                return given;
+            }
+
+            if (_visibility.IsShown(number))
+            {
+                return number;
+            }
+        }
+
+        return named;
     }
 
     // The game counts places in its own list. The screen's list is shorter by the messages not shown before that place.

@@ -4,7 +4,7 @@ A BepInEx plugin for Football Manager 27 that aims to make the shortlist a plain
 
 ## Status
 
-**Works, with limits.** With `Mode = Quiet` the plugin marks as read each forwarded news story about a player at another club, so those stories stop arriving unread. They still appear in Messages. `Mode = Hide` also keeps them out of Messages; it is built and has not yet run in the game. The plugin does not check which shortlist a player is on: the game offers no way to ask.
+**Works, with limits.** With `Mode = Quiet` the plugin marks as read each forwarded news story about a player at another club, so those stories stop arriving unread. They still appear in Messages. `Mode = Hide` also keeps them out of Messages; it has worked in one short session in the game. The plugin does not check which shortlist a player is on: the game offers no way to ask.
 
 | Step | State |
 | ---- | ----- |
@@ -13,7 +13,7 @@ A BepInEx plugin for Football Manager 27 that aims to make the shortlist a plain
 | Interop trace (the tool that gathers that data) | Built and run in the game. |
 | Inbox triage (judging each message) | Built and seen working in the game. |
 | Marking quiet messages read | Built and seen working in the game. |
-| Keeping quiet messages out of the list | Built; not yet run in the game. The game cannot delete a message or be told not to send it, so the plugin shortens the list on its way to the screen. |
+| Keeping quiet messages out of the list | Built and seen working in one short session. The game cannot delete a message or be told not to send it, so the plugin shortens the list on its way to the screen. |
 
 ## What the game offers on its own
 

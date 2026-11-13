@@ -32,6 +32,9 @@ public sealed class MessageVisibility : IVerdictListener
 
     public bool IsShown(long message) => !_hidden.Contains(message) && !_heldBack.Contains(message);
 
+    /// <summary>True while the message awaits its verdict: it is not shown now and may be shown yet.</summary>
+    public bool IsHeldBack(long message) => _heldBack.Contains(message);
+
     public void Awaiting(long message)
     {
         if (_heldBack.Add(message))
