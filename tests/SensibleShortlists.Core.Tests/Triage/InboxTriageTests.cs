@@ -159,6 +159,41 @@ public class InboxTriageTests
 
         Assert.Empty(_game.Marked);
         Assert.Contains(_lines, line => line.StartsWith("MESSAGE 12849 QUIET ") && line.Contains(shown));
+        Assert.DoesNotContain(_lines, line => line.StartsWith("MARK "));
+    }
+
+    [Fact]
+    public void Every_unread_quiet_message_of_a_backlog_is_marked()
+    {
+        _triage = Triage(TriageMode.Quiet);
+        _triage.ManagerTeamSeen(GameText.ManagerTeam);
+
+        List(1, 2, 3);
+        AnswerFacts(1, NoiseTitle, read: false);
+        AnswerFacts(2, NoiseTitle, read: true);
+        AnswerFacts(3, NoiseTitle, read: false);
+        AnswerShortlist(GameText.Player);
+
+        Assert.Equal(new object[] { "message 1", "message 3" }, _game.Marked);
+    }
+
+    [Fact]
+    public void A_message_number_marked_in_one_career_is_marked_again_in_another()
+    {
+        _triage = Triage(TriageMode.Quiet);
+        ListAQuietMessage(12849, read: false);
+        _game.Answer("message 12849", "NewsItemHasBeenRead", Flag(true));
+
+        // The other career's first listing is what reveals it. Its team becomes known after that.
+        var other = Game + 1;
+        _triage.MessagesListed(new Listing(other, Manager, new[] { new ListedMessage(7, "message 7") }));
+        _triage.ManagerTeamSeen(GameText.ManagerTeam);
+        _triage.MessagesListed(new Listing(
+            other, Manager, new[] { new ListedMessage(7, "message 7"), new ListedMessage(12849, "message 12849") }));
+        AnswerFacts(12849, NoiseTitle, read: false);
+        AnswerShortlist(GameText.Player);
+
+        Assert.Equal(new object[] { "message 12849", "message 12849" }, _game.Marked);
     }
 
     [Fact]
