@@ -26,9 +26,10 @@ internal sealed class ChannelReader : IGameReader
     private static readonly TimeSpan Patience = TimeSpan.FromSeconds(15);
 
     // How a team context reaches the simulation is not known yet. Until a live run shows it, a read
-    // in the context of a team tries the forms that are safe to try, in this order: no context, then
-    // the team carried on the person's reference under a key the game is seen to use for a context
-    // or a team elsewhere. The answer says which form produced it.
+    // in the context of a team tries every form that is safe to try: no context, and the team
+    // carried on the person's reference under a key the game is seen to use for a context or a team
+    // elsewhere. This is a probe, and it is the one place the adapter chooses between forms; once a
+    // live run shows the right one, the others go.
     private static readonly string?[] TeamContextCodes = { null, "ctxt", "Ttea", "team" };
 
     // Keys the UI uses are hashes of binding paths. The plugin counts up from a fixed start instead.
@@ -75,9 +76,6 @@ internal sealed class ChannelReader : IGameReader
             onValue));
 
     public void ReadPersonInTeam(uint person, uint team, string property, Action<GameValue?> onValue) =>
-        ReadPersonInTeam(person, team, property, attempt: 0, onValue);
-
-    private void ReadPersonInTeam(uint person, uint team, string property, int attempt, Action<GameValue?> onValue) =>
         _queue.Enqueue((
             interop =>
             {
@@ -87,20 +85,38 @@ internal sealed class ChannelReader : IGameReader
                     return;
                 }
 
-                var code = TeamContextCodes[attempt];
-                var reference = GameReferences.Person(person, game, code, team);
-                NoteContextsOnce(reference, property);
-                Open(interop, reference, property, value =>
+                // Every form is tried and every answer recorded, so one session shows which form
+                // works. Whoever asked gets the first form, in order, that answered with something.
+                var answers = new GameValue?[TeamContextCodes.Length];
+                var waitingFor = answers.Length;
+                for (var i = 0; i < TeamContextCodes.Length; i++)
                 {
-                    var empty = value is null || (string.IsNullOrEmpty(value.Text) && value.Records is null);
-                    if (empty && attempt + 1 < TeamContextCodes.Length)
+                    var form = i;
+                    var label = TeamContextCodes[i] ?? "no context";
+
+                    void Answered(GameValue? value)
                     {
-                        ReadPersonInTeam(person, team, property, attempt + 1, onValue);
-                        return;
+                        var empty = value is null || (string.IsNullOrEmpty(value.Text) && value.Records is null);
+                        answers[form] = empty ? null : value! with { Text = $"[{label}] {value.Text}" };
+                        _log.Write($"NOTE status of {person} as [{label}]: {(empty ? "nothing" : value!.Text)}");
+                        if (--waitingFor == 0)
+                        {
+                            onValue(answers.FirstOrDefault(answer => answer is not null));
+                        }
                     }
 
-                    onValue(empty ? null : value! with { Text = $"[{code ?? "no context"}] {value.Text}" });
-                });
+                    try
+                    {
+                        var reference = GameReferences.Person(person, game, TeamContextCodes[i], team);
+                        NoteContextsOnce(reference, property);
+                        Open(interop, reference, property, Answered);
+                    }
+                    catch (Exception exception)
+                    {
+                        InteropFeed.ReportFirstFailure($"{nameof(ChannelReader)}.{nameof(ReadPersonInTeam)}", exception);
+                        Answered(null);
+                    }
+                }
             },
             onValue));
 
