@@ -14,7 +14,6 @@ namespace SensibleShortlists.Plugin.Game.Triage;
 internal sealed class TriageObserver : IInteropObserver
 {
     private readonly InboxWatch _watch = new();
-    private readonly Dictionary<uint, string> _printedProperties = new();
     private readonly InboxTriage _triage;
     private readonly ChannelReader _reader;
 
@@ -26,7 +25,7 @@ internal sealed class TriageObserver : IInteropObserver
 
     public void ChannelOpened(InteropReference? reference, PropertyID property, ulong key)
     {
-        var role = _watch.ChannelOpened(key, Printed(property));
+        var role = _watch.ChannelOpened(key, GameDescriber.Property(property));
         if (role == ChannelRole.ManagerTeam
             && reference is not null
             && GameReferences.TryGetRecord(reference, out var team))
@@ -51,16 +50,4 @@ internal sealed class TriageObserver : IInteropObserver
     }
 
     public void Tick() => _reader.Flush();
-
-    // Printing a property is a call into the game, and channels open by the thousand.
-    private string Printed(PropertyID property)
-    {
-        if (!_printedProperties.TryGetValue(property.id, out var printed))
-        {
-            printed = property.ToString();
-            _printedProperties[property.id] = printed;
-        }
-
-        return printed;
-    }
 }

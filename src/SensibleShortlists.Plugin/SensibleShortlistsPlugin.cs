@@ -63,6 +63,11 @@ public sealed class SensibleShortlistsPlugin : BasePlugin
             observers.Add(new TriageObserver(new InboxTriage(reader, triageFile), reader));
         }
 
+        if (traceNodeGraph.Value && !tracing)
+        {
+            Log.LogWarning("TraceNodeGraph is on but the interop trace is not running, so the node graph is not recorded.");
+        }
+
         // With nothing switched on, the game is not hooked at all.
         if (observers.Count == 0)
         {

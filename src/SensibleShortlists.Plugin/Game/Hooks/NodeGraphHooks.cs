@@ -17,23 +17,20 @@ internal static class NodeGraphHooks
 {
     public static readonly (string Name, Func<(MethodBase? Target, MethodInfo Prefix)> Resolve)[] All =
     {
-        Hook(
-            nameof(GameInteropSubsystem.AddNode),
-            nameof(OnAddNode),
-            typeof(Bindings.Key),
-            typeof(Bindings.Key),
-            typeof(PropertyID)),
-        Hook(nameof(GameInteropSubsystem.RemoveNode), nameof(OnRemoveNode), typeof(Bindings.Key)),
-        Hook(nameof(GameInteropSubsystem.SetTarget), nameof(OnSetTarget), typeof(Bindings.Key), typeof(Bindings.DataKey)),
-        Hook(nameof(GameInteropSubsystem.AddData), nameof(OnAddData), typeof(Bindings.DataKey)),
-        Hook(nameof(GameInteropSubsystem.SetData), nameof(OnSetData), typeof(Bindings.DataKey), typeof(TypedValue)),
-        Hook(nameof(GameInteropSubsystem.ReleaseData), nameof(OnReleaseData), typeof(Bindings.DataKey)),
+        Hook("AddNode", nameof(OnAddNode), static () => new[] { typeof(Bindings.Key), typeof(Bindings.Key), typeof(PropertyID) }),
+        Hook("RemoveNode", nameof(OnRemoveNode), static () => new[] { typeof(Bindings.Key) }),
+        Hook("SetTarget", nameof(OnSetTarget), static () => new[] { typeof(Bindings.Key), typeof(Bindings.DataKey) }),
+        Hook("AddData", nameof(OnAddData), static () => new[] { typeof(Bindings.DataKey) }),
+        Hook("SetData", nameof(OnSetData), static () => new[] { typeof(Bindings.DataKey), typeof(TypedValue) }),
+        Hook("ReleaseData", nameof(OnReleaseData), static () => new[] { typeof(Bindings.DataKey) }),
     };
 
-    private static (string, Func<(MethodBase?, MethodInfo)>) Hook(string method, string prefix, params Type[] parameters) => (
-        $"{nameof(GameInteropSubsystem)}.{method}",
+    // The game's types are named only inside the functions the installer calls under its guard,
+    // so a type missing from a new game build costs the hooks that use it and nothing else.
+    private static (string, Func<(MethodBase?, MethodInfo)>) Hook(string method, string prefix, Func<Type[]> parameters) => (
+        $"GameInteropSubsystem.{method}",
         () => (
-            AccessTools.Method(typeof(GameInteropSubsystem), method, parameters),
+            AccessTools.Method(typeof(GameInteropSubsystem), method, parameters()),
             AccessTools.Method(typeof(NodeGraphHooks), prefix)));
 
     private static void OnAddNode(Bindings.Key __0, Bindings.Key __1, PropertyID __2) =>
