@@ -12,8 +12,9 @@ public sealed record Listing(long Game, uint Manager, IReadOnlyList<ListedMessag
 
 /// <summary>
 /// Gathers the facts of each listed message from the game, judges it once, and records the
-/// verdict. The game answers reads later and in any order, or at once, so every step here is
-/// driven by an answer arriving.
+/// verdict. In quiet mode it also acts on the verdict: an unread message judged quiet is marked
+/// read. The game answers reads later and in any order, or at once, so every step here is driven
+/// by an answer arriving.
 /// </summary>
 /// <remarks>Not thread-safe: the game calls its UI on one thread, and so everything arrives on it.</remarks>
 public sealed class InboxTriage
@@ -22,8 +23,8 @@ public sealed class InboxTriage
     private const string IsShortlistProperty = "PersonSearchIsShortlist";
     private const string PeopleProperty = "PersonList";
 
-    // The flags the game shows on a player's banner. One of them says the player is on a shortlist
-    // of the manager's, whichever shortlist that is, which the Shortlist screen's list cannot say.
+    private const string ReadProperty = "NewsItemHasBeenRead";
+
     // Candidates for telling that a person is on any of the manager's shortlists, not only the
     // selected one. Which of them the game answers, and what the answers mean, is what a live
     // session has to show; until then they are recorded beside the verdicts and feed none.
@@ -34,16 +35,20 @@ public sealed class InboxTriage
     };
 
     private readonly IGameReader _game;
+    private readonly IGameCommands _commands;
     private readonly ITraceSink _log;
+    private readonly TriageMode _mode;
     private readonly HashSet<long> _started = new();
     private readonly HashSet<uint> _peopleAsked = new();
     private uint? _managerTeam;
     private long? _runningGame;
 
-    public InboxTriage(IGameReader game, ITraceSink log)
+    public InboxTriage(IGameReader game, IGameCommands commands, ITraceSink log, TriageMode mode)
     {
         _game = game;
+        _commands = commands;
         _log = log;
+        _mode = mode;
     }
 
     public void ManagerTeamSeen(uint record)
@@ -88,15 +93,30 @@ public sealed class InboxTriage
         shortlist.Start();
     }
 
-    private void Judge(MessageFacts facts)
+    private void Judge(ListedMessage message, MessageFacts facts)
     {
         var verdict = QuietPolicy.Judge(facts, _managerTeam);
         var links = string.Join(",", facts.Links.Select(link => link + Mark(facts, link)));
         var title = facts.Title is null ? "?" : $"\"{TraceText.Sanitize(facts.Title)}\"";
         _log.Write(
             $"MESSAGE {facts.Id} {verdict} forwarded={Show(facts.Forwarded)} respond={Show(facts.CanRespond)} "
-            + $"responded={Show(facts.Responded)} priority={Show(facts.Priority)} links={links} title={title}");
+            + $"responded={Show(facts.Responded)} priority={Show(facts.Priority)} read={Show(facts.Read)} "
+            + $"links={links} title={title}");
+
+        // Only a message known to be unread is touched: an unknown is not a no.
+        if (_mode == TriageMode.Quiet && verdict.IsQuiet && facts.Read == false)
+        {
+            MarkRead(message);
+        }
+
         ProbePeople(facts);
+    }
+
+    // The game is asked afterwards what it now says, so the record shows whether it obeyed.
+    private void MarkRead(ListedMessage message)
+    {
+        _commands.MarkRead(message.Handle);
+        _game.ReadMessage(message.Handle, ReadProperty, value => _log.Write($"MARK {message.Id} read={Show(value?.AsFlag())}"));
     }
 
     private void ProbePeople(MessageFacts facts)
@@ -212,6 +232,7 @@ public sealed class InboxTriage
         private bool? _responded;
         private bool? _priority;
         private bool? _forwarded;
+        private bool? _read;
         private EmbeddedText? _title;
         private int _waitingFor;
 
@@ -225,11 +246,12 @@ public sealed class InboxTriage
         public void Start()
         {
             // Counted before asking: a game that answers at once must not see zero too early.
-            _waitingFor = 5;
+            _waitingFor = 6;
             Ask("CanRespond", value => _canRespond = value?.AsFlag());
             Ask("NewsHasResponded", value => _responded = value?.AsFlag());
             Ask("NewsItemIsPriority", value => _priority = value?.AsFlag());
             Ask("IsForwarded", value => _forwarded = value?.AsFlag());
+            Ask(ReadProperty, value => _read = value?.AsFlag());
             Ask("NewsTitleString", value => _title = value?.Text is { } text ? EmbeddedText.Parse(text) : null);
         }
 
@@ -243,12 +265,13 @@ public sealed class InboxTriage
                 }
             });
 
-        private void Finish(IReadOnlySet<uint>? shortlist) => _triage.Judge(new MessageFacts(
+        private void Finish(IReadOnlySet<uint>? shortlist) => _triage.Judge(_message, new MessageFacts(
             _message.Id,
             _canRespond,
             _responded,
             _priority,
             _forwarded,
+            _read,
             _title?.Plain,
             _title?.Links ?? Array.Empty<RecordLink>(),
             shortlist));

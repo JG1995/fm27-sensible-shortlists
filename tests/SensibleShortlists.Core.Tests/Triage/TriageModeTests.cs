@@ -13,10 +13,19 @@ public class TriageModeTests
     }
 
     [Theory]
+    [InlineData("Quiet")]
+    [InlineData(" quiet ")]
+    public void Quiet_is_recognised_whatever_its_case_or_spacing(string setting)
+    {
+        Assert.Equal(TriageMode.Quiet, TriageModes.Parse(setting));
+    }
+
+    [Theory]
     [InlineData("Off")]
     [InlineData("")]
     [InlineData(null)]
-    [InlineData("Quiet")]
+    [InlineData("Quite")]
+    [InlineData("Observe,Quiet")]
     [InlineData("1")]
     public void Anything_else_is_off(string? setting)
     {

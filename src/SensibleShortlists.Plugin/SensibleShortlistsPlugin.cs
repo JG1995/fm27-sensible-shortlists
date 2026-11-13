@@ -26,7 +26,8 @@ public sealed class SensibleShortlistsPlugin : BasePlugin
             "Mode",
             nameof(TriageMode.Off),
             "Off: do nothing. Observe: judge each inbox message and record the verdict to "
-            + $"BepInEx/{TriageFileName}, without changing anything in the game.");
+            + $"BepInEx/{TriageFileName}, without changing anything in the game. "
+            + "Quiet: as Observe, and mark as read each unread message judged to be shortlist noise.");
         var traceInterop = Config.Bind(
             "Diagnostics",
             "TraceInterop",
@@ -59,10 +60,12 @@ public sealed class SensibleShortlistsPlugin : BasePlugin
                 withNodeGraph: traceNodeGraph.Value));
         }
 
-        if (TriageModes.Parse(mode.Value) == TriageMode.Observe && Open(TriageFileName, "Inbox triage") is { } triageFile)
+        var triageMode = TriageModes.Parse(mode.Value);
+        if (triageMode != TriageMode.Off && Open(TriageFileName, $"Inbox triage ({triageMode})") is { } triageFile)
         {
             var reader = new ChannelReader(new PropertyCatalog(triageFile), triageFile);
-            observers.Add(new TriageObserver(new InboxTriage(reader, triageFile), reader));
+            var commands = new GameCommands();
+            observers.Add(new TriageObserver(new InboxTriage(reader, commands, triageFile, triageMode), reader, commands));
         }
 
         if (traceNodeGraph.Value && !tracing)

@@ -20,6 +20,10 @@ internal static class GameReferences
     private static readonly uint RecordKey = Code("dref");
     private static readonly uint MessageNumberKey = Code("unid");
     private static readonly uint MessageManagerKey = Code("huma");
+
+    // What this pair says is not known. It is 0 on every message the inbox lists and on every
+    // message the game has been seen to mark read.
+    private static readonly uint MessagePeayKey = Code("peay");
     private static readonly uint SearchManagerKey = Code("Hhum");
     private static readonly uint SearchTeamKey = Code("Ttea");
     private static readonly uint SearchTypeKey = Code("type");
@@ -29,6 +33,9 @@ internal static class GameReferences
 
     // The kind every reference to a database record carries, person and team alike.
     private const int DatabaseRecordKind = 28;
+
+    // The kind a reference to an inbox message carries.
+    private const int NewsItemKind = 70;
 
     // The kind a person-search reference carries, and the search type of the Shortlist screen.
     private const int PersonSearchKind = 73;
@@ -89,6 +96,30 @@ internal static class GameReferences
         }
 
         return messages.Count == 0 ? null : new Listing(game, unchecked((uint)manager), messages);
+    }
+
+    /// <summary>
+    /// A listed message in the form the game sends its "mark as read" event to: its kind, the
+    /// running game, the manager, and the message's number, and nothing else the listing may have
+    /// added. Null when the listed message does not carry all three.
+    /// </summary>
+    public static InteropReference? MessageToMark(InteropReference listed)
+    {
+        if (!listed.TryGetValue(GameKey, out var game)
+            || !listed.TryGetValue(MessageManagerKey, out var manager)
+            || !listed.TryGetValue(MessageNumberKey, out var number))
+        {
+            return null;
+        }
+
+        // In key order, as the game's own references are.
+        var ids = new Il2CppSystem.Collections.Generic.List<InteropReference.Pair>();
+        ids.Add(new InteropReference.Pair { m_id = KindKey, m_value = NewsItemKind });
+        ids.Add(new InteropReference.Pair { m_id = GameKey, m_value = game });
+        ids.Add(new InteropReference.Pair { m_id = MessageManagerKey, m_value = manager });
+        ids.Add(new InteropReference.Pair { m_id = MessagePeayKey, m_value = 0 });
+        ids.Add(new InteropReference.Pair { m_id = MessageNumberKey, m_value = number });
+        return new NewsItemReference(ids);
     }
 
     /// <summary>
