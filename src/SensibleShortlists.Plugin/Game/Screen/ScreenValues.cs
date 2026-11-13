@@ -9,8 +9,9 @@ namespace SensibleShortlists.Plugin.Game.Screen;
 /// something else later.
 /// </summary>
 /// <remarks>
-/// Every value handed out is a copy made for that occasion, wrapper and items alike. A value the
-/// screen holds is the game's to keep or reuse; the ones remembered here were never given to it.
+/// Every value handed out is a copy made for that occasion, wrapper and items alike: a value the
+/// screen holds is the game's to keep or reuse. The values remembered here are only ever copied
+/// from. One of them is also held by the screen when the game's own value was left in place.
 /// </remarks>
 internal sealed class ScreenValues
 {

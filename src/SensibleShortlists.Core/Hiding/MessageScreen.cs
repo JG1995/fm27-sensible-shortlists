@@ -1,5 +1,4 @@
 using SensibleShortlists.Core.Diagnostics;
-using SensibleShortlists.Core.Triage;
 
 namespace SensibleShortlists.Core.Hiding;
 
@@ -43,12 +42,12 @@ public sealed record PositionUpdate(ulong Key, int Position) : ScreenUpdate(Key)
 /// </remarks>
 public sealed class MessageScreen
 {
-    private static readonly Dictionary<string, ScreenRole> Roles = new(StringComparer.Ordinal)
+    private static readonly (string Property, ScreenRole Role)[] Roles =
     {
-        ["HumanPortalFilteredMessages"] = ScreenRole.InboxList,
-        ["HumanIncomingMessages"] = ScreenRole.IncomingList,
-        ["HumanPortalCurrentMessageToOpen"] = ScreenRole.MessageToOpen,
-        ["HumanPortalNewestUnreadMessageIndex"] = ScreenRole.UnreadPosition,
+        ("HumanPortalFilteredMessages", ScreenRole.InboxList),
+        ("HumanIncomingMessages", ScreenRole.IncomingList),
+        ("HumanPortalCurrentMessageToOpen", ScreenRole.MessageToOpen),
+        ("HumanPortalNewestUnreadMessageIndex", ScreenRole.UnreadPosition),
     };
 
     private readonly MessageVisibility _visibility;
@@ -59,6 +58,7 @@ public sealed class MessageScreen
     private readonly Dictionary<ulong, (int Named, int Given)> _positions = new();
     private IReadOnlyList<long?> _inbox = Array.Empty<long?>();
     private int _versionGiven;
+    private int _career;
     private bool _inboxChanged;
 
     public MessageScreen(MessageVisibility visibility, ITraceSink log)
@@ -66,28 +66,49 @@ public sealed class MessageScreen
         _visibility = visibility;
         _log = log;
         _versionGiven = visibility.Version;
+        _career = visibility.Career;
     }
 
     /// <summary>True once the plugin has given up changing what the screen is given.</summary>
     public bool Stopped { get; private set; }
 
-    /// <summary>The UI opened a channel. The game prints a property as <c>Name:number</c>.</summary>
+    /// <summary>
+    /// The UI opened a channel. The game prints a property as <c>Name:number</c>. This runs for
+    /// every binding in the game, nearly all of them nothing to do with the inbox.
+    /// </summary>
     public ScreenRole ChannelOpened(ulong key, string? printedProperty)
     {
-        // A channel just opened has had no delivery, whatever the key carried before.
-        Forget(key);
-        if (Roles.TryGetValue(InboxWatch.NameOf(printedProperty), out var role))
+        var role = RoleNamed(printedProperty);
+        if (role == ScreenRole.None)
         {
-            _roles[key] = role;
-            return role;
+            // The game reuses keys, so a key that carried the inbox may now carry something else.
+            if (_roles.Remove(key))
+            {
+                Forget(key);
+            }
+
+            return ScreenRole.None;
         }
 
-        // The game reuses keys, so a key that carried the inbox may now carry something else.
-        _roles.Remove(key);
-        return ScreenRole.None;
+        // A channel just opened has had no delivery, whatever the key carried before.
+        Forget(key);
+        _roles[key] = role;
+        return role;
     }
 
     public ScreenRole RoleOf(ulong key) => Stopped ? ScreenRole.None : _roles.GetValueOrDefault(key);
+
+    /// <summary>
+    /// Drops what the game last delivered on a channel: the delivery was not what the channel
+    /// carries, or the binding it fed no longer exists. Nothing is given on it until the game
+    /// delivers again.
+    /// </summary>
+    public void Forget(ulong key)
+    {
+        _lists.Remove(key);
+        _toOpen.Remove(key);
+        _positions.Remove(key);
+    }
 
     /// <param name="messages">The list's items in order: a message's number, or null for an item that is not a message.</param>
     /// <returns>The places of the items to show, or null to leave the game's list alone.</returns>
@@ -99,6 +120,7 @@ public sealed class MessageScreen
             return null;
         }
 
+        LeaveOldCareerBehind();
         var shown = ShownPlaces(messages);
         _lists[key] = new ListState(role, messages, shown);
         if (role == ScreenRole.InboxList)
@@ -124,7 +146,12 @@ public sealed class MessageScreen
             return null;
         }
 
-        var given = MessageToOpen(message);
+        LeaveOldCareerBehind();
+
+        // The game repeats itself, and a message given in the named one's place stays the answer
+        // while it can be seen.
+        var before = _toOpen.TryGetValue(key, out var earlier) && earlier.Named == message ? earlier.Given : message;
+        var given = MessageToOpen(message, before);
         _toOpen[key] = (message, given);
         if (given == message)
         {
@@ -143,6 +170,7 @@ public sealed class MessageScreen
             return null;
         }
 
+        LeaveOldCareerBehind();
         var given = Position(position);
         _positions[key] = (position, given);
         if (given == position)
@@ -153,12 +181,6 @@ public sealed class MessageScreen
         _log.Write($"ANCHOR key={key} {position} -> {given}");
         return given;
     }
-
-    /// <summary>The game delivered something on the channel that is not what the channel carries.</summary>
-    public void NotUnderstood(ulong key) => Forget(key);
-
-    /// <summary>The binding the channel fed no longer exists.</summary>
-    public void BindingGone(ulong key) => Forget(key);
 
     /// <summary>
     /// Gives up for the rest of the session. From here on every value is the game's own; what the
@@ -189,6 +211,7 @@ public sealed class MessageScreen
             return Array.Empty<ScreenUpdate>();
         }
 
+        LeaveOldCareerBehind();
         foreach (var message in _visibility.ReleaseOverdue())
         {
             _log.Write($"NOTE released {message}");
@@ -230,7 +253,7 @@ public sealed class MessageScreen
         foreach (var key in _toOpen.Keys.OrderBy(key => key).ToArray())
         {
             var (named, given) = _toOpen[key];
-            var message = MessageToOpen(named);
+            var message = MessageToOpen(named, given);
             if (message != given)
             {
                 _toOpen[key] = (named, message);
@@ -242,11 +265,36 @@ public sealed class MessageScreen
         return updates;
     }
 
-    private void Forget(ulong key)
+    // What the game delivered for another career is about other messages under the same numbers.
+    // The screen is given nothing from it: the new career's values arrive on their own.
+    private void LeaveOldCareerBehind()
     {
-        _lists.Remove(key);
-        _toOpen.Remove(key);
-        _positions.Remove(key);
+        if (_career == _visibility.Career)
+        {
+            return;
+        }
+
+        _career = _visibility.Career;
+        _lists.Clear();
+        _toOpen.Clear();
+        _positions.Clear();
+        _inbox = Array.Empty<long?>();
+    }
+
+    private static ScreenRole RoleNamed(string? printedProperty)
+    {
+        var name = printedProperty.AsSpan();
+        var separator = name.IndexOf(':');
+        name = separator < 0 ? name : name[..separator];
+        foreach (var (property, role) in Roles)
+        {
+            if (name.SequenceEqual(property))
+            {
+                return role;
+            }
+        }
+
+        return ScreenRole.None;
     }
 
     private bool IsShown(long? message) => message is not { } number || _visibility.IsShown(number);
@@ -254,11 +302,21 @@ public sealed class MessageScreen
     private int[] ShownPlaces(IReadOnlyList<long?> messages) =>
         Enumerable.Range(0, messages.Count).Where(place => IsShown(messages[place])).ToArray();
 
-    // The game's choice stands when it can be seen, and when the inbox shows nothing to offer instead.
-    private long MessageToOpen(long named) =>
-        _visibility.IsShown(named)
-            ? named
-            : _inbox.FirstOrDefault(message => message is { } number && _visibility.IsShown(number)) ?? named;
+    // The game's choice stands when it can be seen. Otherwise the message given before stands
+    // while it can be seen: the inbox list changes with every search, and the message to open must
+    // not follow it around. Only then is the first shown message of the inbox offered, and when
+    // the inbox shows nothing, nothing changes.
+    private long MessageToOpen(long named, long given)
+    {
+        if (_visibility.IsShown(named))
+        {
+            return named;
+        }
+
+        return given != named && _visibility.IsShown(given)
+            ? given
+            : _inbox.FirstOrDefault(message => message is { } number && _visibility.IsShown(number)) ?? given;
+    }
 
     // The game counts places in its own list. The screen's list is shorter by the messages not shown before that place.
     private int Position(int named) =>
@@ -267,7 +325,7 @@ public sealed class MessageScreen
     private void Record(ulong key, ScreenRole role, int shown, int listed) =>
         _log.Write($"LIST {PropertyOf(role)} key={key} shown={shown} of {listed}");
 
-    private static string PropertyOf(ScreenRole role) => Roles.First(pair => pair.Value == role).Key;
+    private static string PropertyOf(ScreenRole role) => Roles.First(known => known.Role == role).Property;
 
     private sealed record ListState(ScreenRole Role, IReadOnlyList<long?> Messages, int[] Given);
 }

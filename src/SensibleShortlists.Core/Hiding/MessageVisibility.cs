@@ -27,6 +27,9 @@ public sealed class MessageVisibility : IVerdictListener
     /// <summary>Moves whenever what is shown may have changed.</summary>
     public int Version { get; private set; }
 
+    /// <summary>Moves when another career is loaded: every message number means another message from then on.</summary>
+    public int Career { get; private set; }
+
     public bool IsShown(long message) => !_hidden.Contains(message) && !_heldBack.Contains(message);
 
     public void Awaiting(long message)
@@ -55,6 +58,7 @@ public sealed class MessageVisibility : IVerdictListener
         _heldBack.Clear();
         _waits.Clear();
         Version++;
+        Career++;
     }
 
     /// <summary>Stops holding back the messages that have waited too long, and returns them.</summary>
