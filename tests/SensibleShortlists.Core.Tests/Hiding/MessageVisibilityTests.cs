@@ -27,6 +27,21 @@ public class MessageVisibilityTests
     }
 
     [Fact]
+    public void Only_a_message_awaiting_its_verdict_counts_as_held_back()
+    {
+        _visibility.Awaiting(1);
+        _visibility.Awaiting(2);
+        _visibility.Awaiting(3);
+        _visibility.Judged(2, Verdict.Quiet);
+        _visibility.Judged(3, Verdict.Keep("sent directly"));
+
+        Assert.True(_visibility.IsHeldBack(1));
+        Assert.False(_visibility.IsHeldBack(2));
+        Assert.False(_visibility.IsHeldBack(3));
+        Assert.False(_visibility.IsHeldBack(4));
+    }
+
+    [Fact]
     public void A_message_judged_quiet_is_hidden()
     {
         _visibility.Awaiting(1);

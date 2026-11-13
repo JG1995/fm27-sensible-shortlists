@@ -303,18 +303,61 @@ public class MessageScreenTests
     }
 
     [Fact]
-    public void A_held_back_message_to_open_is_replaced_until_it_is_judged()
+    public void A_held_back_message_to_open_is_left_to_the_game_until_it_is_judged()
     {
         Keep(1);
         _visibility.Awaiting(2);
         _screen.ListDelivered(Inbox, Messages(2, 1));
 
-        Assert.Equal(1, _screen.MessageToOpenDelivered(ToOpen, 2));
+        Assert.Null(_screen.MessageToOpenDelivered(ToOpen, 2));
+
+        Quiet(2);
+        _lines.Clear();
+        Assert.Contains(new MessageToOpenUpdate(ToOpen, 1), _screen.Refresh(), UpdateComparer.Instance);
+        Assert.Contains("OPEN key=12 2 -> 1", _lines);
+    }
+
+    [Fact]
+    public void A_held_back_message_to_open_that_is_then_kept_needs_nothing_given()
+    {
+        Keep(1);
+        _visibility.Awaiting(2);
+        _screen.ListDelivered(Inbox, Messages(2, 1));
+        _screen.MessageToOpenDelivered(ToOpen, 2);
 
         Keep(2);
-        _lines.Clear();
+
+        Assert.DoesNotContain(_screen.Refresh(), update => update is MessageToOpenUpdate);
+    }
+
+    [Fact]
+    public void The_message_to_open_is_not_chosen_while_a_newer_message_awaits_its_verdict()
+    {
+        Quiet(3);
+        _visibility.Awaiting(2);
+        Keep(1);
+        _screen.ListDelivered(Inbox, Messages(3, 2, 1));
+
+        // 1 can be seen already, but 2 is newer and may yet be kept.
+        Assert.Null(_screen.MessageToOpenDelivered(ToOpen, 3));
+
+        Keep(2);
+
         Assert.Contains(new MessageToOpenUpdate(ToOpen, 2), _screen.Refresh(), UpdateComparer.Instance);
-        Assert.Contains("OPEN key=12 2 -> 2", _lines);
+    }
+
+    [Fact]
+    public void A_release_settles_a_message_to_open_that_was_waiting()
+    {
+        Quiet(3);
+        _visibility.Awaiting(2);
+        Keep(1);
+        _screen.ListDelivered(Inbox, Messages(3, 2, 1));
+        _screen.MessageToOpenDelivered(ToOpen, 3);
+
+        _now += TimeSpan.FromSeconds(20);
+
+        Assert.Contains(new MessageToOpenUpdate(ToOpen, 2), _screen.Refresh(), UpdateComparer.Instance);
     }
 
     [Fact]
@@ -375,23 +418,17 @@ public class MessageScreenTests
     }
 
     [Fact]
-    public void A_release_moves_the_message_to_open_and_the_unread_position_already_given()
+    public void A_release_moves_the_unread_position_already_given()
     {
         Keep(1);
         _visibility.Awaiting(2);
         _screen.ListDelivered(Inbox, Messages(2, 1));
-        Assert.Equal(1, _screen.MessageToOpenDelivered(ToOpen, 2));
         Assert.Equal(0, _screen.PositionDelivered(Position, 1));
 
         _now += TimeSpan.FromSeconds(20);
 
         Assert.Equal(
-            new ScreenUpdate[]
-            {
-                new ListUpdate(Inbox, new[] { 0, 1 }),
-                new PositionUpdate(Position, 1),
-                new MessageToOpenUpdate(ToOpen, 2),
-            },
+            new ScreenUpdate[] { new ListUpdate(Inbox, new[] { 0, 1 }), new PositionUpdate(Position, 1) },
             _screen.Refresh(),
             UpdateComparer.Instance);
     }
