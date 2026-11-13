@@ -16,6 +16,10 @@ internal static class GameDescriber
 {
     private const int MaxListItems = 30;
 
+    // Records can hold records. Three levels shows a list of records of values, which is as deep as
+    // anything the trace has needed.
+    private const int MaxDepth = 3;
+
     private static readonly System.Collections.Concurrent.ConcurrentDictionary<uint, string?> PrintedProperties = new();
 
     /// <summary>Names come from the game's own enums, so they follow the game when it updates.</summary>
@@ -49,7 +53,7 @@ internal static class GameDescriber
         TraceText.Describe(reference, static r => r is null ? null : DescribeReference(r));
 
     public static string? Value(TypedValue? value) =>
-        TraceText.Describe(value, static v => v is null ? null : DescribeValue(v));
+        TraceText.Describe(value, static v => v is null ? null : DescribeValue(v, 0));
 
     private static string DescribeReference(InteropReference reference)
     {
@@ -64,13 +68,13 @@ internal static class GameDescriber
         return text.Append(']').ToString();
     }
 
-    private static string DescribeValue(TypedValue value)
+    private static string DescribeValue(TypedValue value, int depth)
     {
         var text = $"{value.DataType?.Name ?? "?"}:{value.AsString()}";
 
-        // References and lists print as their type name only, and they are what the trace is for:
-        // which message, which player, which messages are in the inbox. Failing to expand one must
-        // not lose the line.
+        // References, records and lists print as their type name only, and they are what the trace
+        // is for: which message, which player, which flags, which messages are in the inbox.
+        // Failing to expand one must not lose the line.
         try
         {
             var boxed = value.Get();
@@ -79,9 +83,19 @@ internal static class GameDescriber
                 return DescribeReference(reference);
             }
 
+            if (depth >= MaxDepth)
+            {
+                return text;
+            }
+
+            if (boxed?.TryCast<Record>() is { } record)
+            {
+                return DescribeRecord(record, depth);
+            }
+
             var items = boxed?.TryCast<Il2CppSystem.Collections.IList>();
             var collection = boxed?.TryCast<Il2CppSystem.Collections.ICollection>();
-            return items is null || collection is null ? text : $"{text} {DescribeItems(items, collection.Count)}";
+            return items is null || collection is null ? text : $"{text} {DescribeItems(items, collection.Count, depth)}";
         }
         catch (Exception exception)
         {
@@ -89,24 +103,48 @@ internal static class GameDescriber
         }
     }
 
+    // A record is a bag of properties. The game uses one for whatever is not a game object of its
+    // own: a status flag on a player, a shortlist, an option in a list.
+    private static string DescribeRecord(Record record, int depth)
+    {
+        var text = new StringBuilder("{");
+        var entries = record.GetEnumerator();
+        for (var shown = 0; entries.MoveNext(); shown++)
+        {
+            if (shown == MaxListItems)
+            {
+                text.Append("; …");
+                break;
+            }
+
+            var entry = entries.Current;
+            text.Append(shown == 0 ? string.Empty : "; ")
+                .Append(Property(new PropertyID { id = entry.Key }))
+                .Append('=')
+                .Append(entry.Value is { } value ? DescribeValue(value, depth + 1) : "null");
+        }
+
+        return text.Append('}').ToString();
+    }
+
     // The interop wrapper for IList does not carry ICollection's members, so the count comes separately.
-    private static string DescribeItems(Il2CppSystem.Collections.IList items, int count)
+    private static string DescribeItems(Il2CppSystem.Collections.IList items, int count, int depth)
     {
         var text = new StringBuilder().Append(count).Append(" items {");
         for (var i = 0; i < count && i < MaxListItems; i++)
         {
-            text.Append(i == 0 ? string.Empty : "; ").Append(DescribeItem(items[i]));
+            text.Append(i == 0 ? string.Empty : "; ").Append(DescribeItem(items[i], depth));
         }
 
         return text.Append(count > MaxListItems ? "; …}" : "}").ToString();
     }
 
     // The game's lists hold values wrapped in TypedValue, one level down from the list itself.
-    private static string DescribeItem(Il2CppSystem.Object? item)
+    private static string DescribeItem(Il2CppSystem.Object? item, int depth)
     {
         if (item?.TryCast<TypedValue>() is { } value)
         {
-            return DescribeValue(value);
+            return DescribeValue(value, depth + 1);
         }
 
         return item?.TryCast<InteropReference>() is { } reference
