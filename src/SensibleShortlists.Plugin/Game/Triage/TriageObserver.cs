@@ -1,3 +1,4 @@
+using FM.UI;
 using SensibleShortlists.Core.Triage;
 using SensibleShortlists.Plugin.Game.Hooks;
 using SI.Bindable.Reference.Core;
@@ -36,7 +37,7 @@ internal sealed class TriageObserver : IInteropObserver
         }
     }
 
-    public void ValuesDelivered(ulong[] keys, Il2CppSystem.Collections.Generic.List<TypedValue> values)
+    public void ValuesDelivered(InteropDataHandler handler, ulong[] keys, Il2CppSystem.Collections.Generic.List<TypedValue> values)
     {
         for (var i = 0; i < keys.Length && i < values.Count; i++)
         {

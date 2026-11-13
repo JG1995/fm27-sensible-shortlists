@@ -22,8 +22,8 @@ internal sealed class ChannelReader : IGameReader
 {
     private const int ReadsPerTick = 48;
 
-    // The game answers its own UI within a tick or two.
-    private static readonly TimeSpan Patience = TimeSpan.FromSeconds(15);
+    /// <summary>How long a read waits for its answer. The game answers its own UI within a tick or two.</summary>
+    public static readonly TimeSpan Patience = TimeSpan.FromSeconds(15);
 
     // Keys the UI uses are hashes of binding paths. The plugin counts up from a fixed start instead.
     private const ulong FirstKey = 0x5353_4C52_0000_0000;

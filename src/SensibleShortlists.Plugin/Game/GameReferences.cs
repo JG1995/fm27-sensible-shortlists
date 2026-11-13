@@ -65,15 +65,62 @@ internal static class GameReferences
         var manager = 0;
         foreach (var message in References(list, out _) ?? Array.Empty<InteropReference>())
         {
-            if (message.TryGetValue(MessageNumberKey, out var number)
-                && message.TryGetValue(GameKey, out game)
-                && message.TryGetValue(MessageManagerKey, out manager))
+            if (IsListedMessage(message, out var number, out var itsGame, out var itsManager))
             {
+                game = itsGame;
+                manager = itsManager;
                 messages.Add(new ListedMessage(number, new NewsItemReference(CopyOf(message.m_id))));
             }
         }
 
         return messages.Count == 0 ? null : new Listing(game, unchecked((uint)manager), messages);
+    }
+
+    /// <summary>
+    /// The number of the inbox message a value holds. Null when the value holds anything else,
+    /// which includes a message the triage's listing would not take.
+    /// </summary>
+    public static long? MessageNumber(TypedValue? value) =>
+        value?.Get()?.TryCast<InteropReference>() is { } reference && IsListedMessage(reference, out var number, out _, out _)
+            ? number
+            : null;
+
+    /// <summary>
+    /// The items of a list value, each still wrapped as the game delivered it. Null when the value
+    /// is not a list, or holds an item that is not a value.
+    /// </summary>
+    public static IReadOnlyList<TypedValue>? Items(TypedValue? value)
+    {
+        var boxed = value?.Get();
+        var items = boxed?.TryCast<Il2CppSystem.Collections.IList>();
+        var collection = boxed?.TryCast<Il2CppSystem.Collections.ICollection>();
+        if (items is null || collection is null)
+        {
+            return null;
+        }
+
+        var wrapped = new List<TypedValue>(collection.Count);
+        for (var i = 0; i < collection.Count; i++)
+        {
+            if (items[i]?.TryCast<TypedValue>() is not { } item)
+            {
+                return null;
+            }
+
+            wrapped.Add(item);
+        }
+
+        return wrapped;
+    }
+
+    // A message as the inbox lists it says which message, in which game, for which manager.
+    private static bool IsListedMessage(InteropReference reference, out int number, out int game, out int manager)
+    {
+        game = 0;
+        manager = 0;
+        return reference.TryGetValue(MessageNumberKey, out number)
+            && reference.TryGetValue(GameKey, out game)
+            && reference.TryGetValue(MessageManagerKey, out manager);
     }
 
     /// <summary>

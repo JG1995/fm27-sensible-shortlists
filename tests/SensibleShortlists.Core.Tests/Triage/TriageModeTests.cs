@@ -21,10 +21,29 @@ public class TriageModeTests
     }
 
     [Theory]
+    [InlineData("Hide")]
+    [InlineData(" hide ")]
+    public void Hide_is_recognised_whatever_its_case_or_spacing(string setting)
+    {
+        Assert.Equal(TriageMode.Hide, TriageModes.Parse(setting));
+    }
+
+    [Theory]
+    [InlineData(TriageMode.Off, false)]
+    [InlineData(TriageMode.Observe, false)]
+    [InlineData(TriageMode.Quiet, true)]
+    [InlineData(TriageMode.Hide, true)]
+    public void Quiet_and_hide_mark_quiet_messages_read(TriageMode mode, bool marks)
+    {
+        Assert.Equal(marks, mode.MarksRead());
+    }
+
+    [Theory]
     [InlineData("Off")]
     [InlineData("")]
     [InlineData(null)]
     [InlineData("Quite")]
+    [InlineData("Hidden")]
     [InlineData("Observe,Quiet")]
     [InlineData("1")]
     public void Anything_else_is_off(string? setting)

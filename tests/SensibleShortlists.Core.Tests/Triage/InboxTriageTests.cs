@@ -10,6 +10,7 @@ public class InboxTriageTests
 
     private readonly FakeGame _game = new();
     private readonly List<string> _lines = new();
+    private readonly List<string> _heard = new();
     private InboxTriage _triage;
 
     public InboxTriageTests() => _triage = Triage(TriageMode.Observe);
@@ -17,7 +18,7 @@ public class InboxTriageTests
     private static string NoiseTitle =>
         $"{GameText.Link(GameText.Brighton, "Brighton")} make offer for {GameText.Link(GameText.Player, "King")}";
 
-    private InboxTriage Triage(TriageMode mode) => new(_game, _game, new ListSink(_lines), mode);
+    private InboxTriage Triage(TriageMode mode) => new(_game, _game, new ListSink(_lines), mode, new Listener(_heard));
 
     private void List(params long[] ids) => _triage.MessagesListed(new Listing(
         Game, Manager, ids.Select(id => new ListedMessage(id, $"message {id}")).ToArray()));
@@ -447,6 +448,74 @@ public class InboxTriageTests
         Assert.Contains(_lines, line => line.StartsWith("MESSAGE 12849 QUIET "));
         Assert.Empty(_game.Marked);
         Assert.DoesNotContain(_lines, line => line.StartsWith("MARK "));
+    }
+
+    [Fact]
+    public void In_hide_mode_an_unread_quiet_message_is_marked_read_as_in_quiet_mode()
+    {
+        _triage = Triage(TriageMode.Hide);
+
+        ListAQuietMessage(12849, read: false);
+
+        Assert.Equal(new object[] { "message 12849" }, _game.Marked);
+    }
+
+    [Fact]
+    public void Whoever_listens_hears_of_a_message_when_it_is_first_listed_and_when_it_is_judged()
+    {
+        ListAQuietMessage(12849);
+        List(12849);
+
+        Assert.Equal(new[] { "awaiting 12849", "judged 12849 QUIET" }, _heard);
+    }
+
+    [Fact]
+    public void Whoever_listens_hears_a_keep_verdict_too()
+    {
+        List(1);
+        AnswerFacts(1, "Coaching Advice", forwarded: false);
+        AnswerManagerClub();
+
+        Assert.Equal(new[] { "awaiting 1", "judged 1 KEEP(sent directly)" }, _heard);
+    }
+
+    [Fact]
+    public void Whoever_listens_is_told_to_forget_before_another_careers_messages_are_listed()
+    {
+        ListAQuietMessage(12849);
+        _heard.Clear();
+
+        _triage.MessagesListed(new Listing(Game + 1, Manager, new[] { new ListedMessage(7, "message 7") }));
+
+        Assert.Equal(new[] { "forget", "awaiting 7" }, _heard);
+    }
+
+    [Fact]
+    public void A_message_dropped_because_another_career_loaded_is_not_reported_judged()
+    {
+        _triage.ManagerTeamSeen(GameText.ManagerTeam);
+        List(1);
+        AnswerManagerClub();
+        _triage.MessagesListed(new Listing(Game + 1, Manager, new[] { new ListedMessage(9, "message 9") }));
+        _heard.Clear();
+
+        AnswerFacts(1, NoiseTitle, read: false);
+        AnswerClubs(GameText.Player);
+
+        Assert.Empty(_heard);
+    }
+
+    private sealed class Listener : IVerdictListener
+    {
+        private readonly List<string> _heard;
+
+        public Listener(List<string> heard) => _heard = heard;
+
+        public void Awaiting(long message) => _heard.Add($"awaiting {message}");
+
+        public void Judged(long message, Verdict verdict) => _heard.Add($"judged {message} {verdict}");
+
+        public void Forget() => _heard.Add("forget");
     }
 
     private sealed class ListSink : ITraceSink

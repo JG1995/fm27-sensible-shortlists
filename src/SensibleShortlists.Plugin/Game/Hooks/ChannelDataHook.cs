@@ -7,7 +7,9 @@ namespace SensibleShortlists.Plugin.Game.Hooks;
 
 /// <summary>
 /// Sees the simulation core answering the channels that were opened. The answer arrives as a batch
-/// of channel keys and values, and the keys are the ones <see cref="OpenChannelHook"/> saw.
+/// of channel keys and values, and the keys are the ones <see cref="OpenChannelHook"/> saw. The
+/// game's handler has not read the batch yet, so a value an observer puts in a value's place is
+/// the one the screen receives.
 /// </summary>
 /// <remarks>
 /// Hooked here, not where the values enter the binding tree (<c>Bindings.SetInternal</c>): that
@@ -23,6 +25,7 @@ internal static class ChannelDataHook
         AccessTools.Method(typeof(ChannelDataHook), nameof(Prefix)));
 
     private static void Prefix(
+        InteropDataHandler __instance,
         Il2CppSystem.ReadOnlySpan<ulong> __0,
         Il2CppSystem.Collections.Generic.List<TypedValue> __2)
     {
@@ -37,6 +40,6 @@ internal static class ChannelDataHook
             return;
         }
 
-        InteropFeed.ValuesDelivered(keys, __2);
+        InteropFeed.ValuesDelivered(__instance, keys, __2);
     }
 }

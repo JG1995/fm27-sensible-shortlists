@@ -1,3 +1,4 @@
+using FM.UI;
 using SI.Bindable.Reference.Core;
 using SI.Core;
 using SI.Interop;
@@ -20,8 +21,12 @@ internal interface IInteropObserver
     {
     }
 
-    /// <summary>The simulation core answered a batch of channels: one value per key, in order.</summary>
-    void ValuesDelivered(ulong[] keys, Il2CppSystem.Collections.Generic.List<TypedValue> values)
+    /// <summary>
+    /// The simulation core answered a batch of channels: one value per key, in order. The game's
+    /// handler reads the batch after the observers have seen it.
+    /// </summary>
+    /// <param name="handler">The game's handler, which is about to give the values to the screen.</param>
+    void ValuesDelivered(InteropDataHandler handler, ulong[] keys, Il2CppSystem.Collections.Generic.List<TypedValue> values)
     {
     }
 

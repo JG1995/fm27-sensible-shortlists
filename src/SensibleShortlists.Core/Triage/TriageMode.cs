@@ -10,6 +10,9 @@ public enum TriageMode
 
     /// <summary>Judge and record, and mark quiet messages as read.</summary>
     Quiet,
+
+    /// <summary>As <see cref="Quiet"/>, and keep quiet messages out of what the screen lists.</summary>
+    Hide,
 }
 
 public static class TriageModes
@@ -22,6 +25,9 @@ public static class TriageModes
     {
         "observe" => TriageMode.Observe,
         "quiet" => TriageMode.Quiet,
+        "hide" => TriageMode.Hide,
         _ => TriageMode.Off,
     };
+
+    public static bool MarksRead(this TriageMode mode) => mode is TriageMode.Quiet or TriageMode.Hide;
 }
