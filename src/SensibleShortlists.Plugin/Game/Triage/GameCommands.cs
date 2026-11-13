@@ -17,17 +17,20 @@ internal sealed class GameCommands : IGameCommands
 
     public void MarkRead(object message)
     {
-        // The game sends this event to a message when the manager opens it. Sent alone, it marks
-        // the message without opening it.
-        if (GameReferences.MessageToMark((InteropReference)message) is not { } target)
+        // Whoever asks is in the middle of handling a message; a command that cannot be prepared
+        // is dropped and reported, and must not stop the rest of that.
+        try
         {
-            InteropFeed.ReportFirstFailure(
-                $"{nameof(GameCommands)}.{nameof(MarkRead)}",
-                new InvalidOperationException("The message does not say which game, manager, or number it is."));
-            return;
+            // The game sends this event to a message when the manager opens it. Sent alone, it
+            // marks the message without opening it.
+            var target = GameReferences.MessageToMark((InteropReference)message)
+                ?? throw new InvalidOperationException("The message does not say which game, manager, or number it is.");
+            _queue.Enqueue(interop => interop.SendEvent((uint)InteropEventIDs.EventFmxMarkPortalMessageAsRead, target, null));
         }
-
-        _queue.Enqueue(interop => interop.SendEvent((uint)InteropEventIDs.EventFmxMarkPortalMessageAsRead, target, null));
+        catch (Exception exception)
+        {
+            InteropFeed.ReportFirstFailure($"{nameof(GameCommands)}.{nameof(MarkRead)}", exception);
+        }
     }
 
     /// <summary>Sends what is waiting. Called on the game's tick, before that tick's reads.</summary>
