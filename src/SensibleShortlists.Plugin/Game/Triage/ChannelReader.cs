@@ -43,7 +43,7 @@ internal sealed class ChannelReader : IGameReader
         _waiting = new ReadLedger(Patience, () => _clock.Elapsed);
     }
 
-    /// <summary>The running game's identifier, needed to refer to a person in it.</summary>
+    /// <summary>The running game's identifier, needed to refer to an object in it.</summary>
     public int? Game { get; set; }
 
     public void ReadMessage(object message, string property, Action<GameValue?> onValue)
@@ -52,7 +52,7 @@ internal sealed class ChannelReader : IGameReader
         _queue.Enqueue((interop => Open(interop, reference, property, onValue), onValue));
     }
 
-    public void ReadPerson(uint record, string property, Action<GameValue?> onValue) =>
+    public void ReadShortlist(uint manager, uint team, string property, Action<GameValue?> onValue) =>
         _queue.Enqueue((
             interop =>
             {
@@ -62,7 +62,7 @@ internal sealed class ChannelReader : IGameReader
                     return;
                 }
 
-                Open(interop, GameReferences.Person(record, game), property, onValue);
+                Open(interop, GameReferences.Shortlist(manager, team, game), property, onValue);
             },
             onValue));
 
@@ -138,18 +138,18 @@ internal sealed class ChannelReader : IGameReader
 
         _finished.Add(key);
 
-        // Whatever goes wrong printing the value, whoever asked still gets an answer.
-        string? text = null;
+        // Whatever goes wrong reading the value, whoever asked still gets an answer.
+        GameValue? answer = null;
         try
         {
-            text = value?.AsString();
+            answer = value is null ? null : new GameValue(value.AsString(), GameReferences.Records(value));
         }
         catch (Exception exception)
         {
             InteropFeed.ReportFirstFailure(nameof(ChannelReader), exception);
         }
 
-        return _waiting.Answer(key, text is null ? null : new GameValue(text));
+        return _waiting.Answer(key, answer);
     }
 
     private void Open(GameInteropSubsystem interop, InteropReference target, string property, Action<GameValue?> onValue)

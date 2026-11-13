@@ -18,9 +18,14 @@ internal static class GameReferences
     private static readonly uint GameKey = Code("Guid");
     private static readonly uint RecordKey = Code("dref");
     private static readonly uint MessageNumberKey = Code("unid");
+    private static readonly uint MessageManagerKey = Code("huma");
+    private static readonly uint SearchManagerKey = Code("Hhum");
+    private static readonly uint SearchTeamKey = Code("Ttea");
+    private static readonly uint SearchTypeKey = Code("type");
 
-    // The kind every reference to a database record carries, person and team alike.
-    private const int DatabaseRecordKind = 28;
+    // The kind a person-search reference carries, and the search type of the Shortlist screen.
+    private const int PersonSearchKind = 73;
+    private const int ShortlistSearchType = 0;
 
     /// <summary>A binding key is one 64-bit number in a struct; reading it directly avoids a native call.</summary>
     public static ulong KeyNumber(ref Bindings.Key key) => Unsafe.As<Bindings.Key, ulong>(ref key);
@@ -34,40 +39,91 @@ internal static class GameReferences
         return found;
     }
 
-    /// <summary>A reference to a person in the running game, from the record a link points to.</summary>
-    public static InteropReference Person(uint record, int game)
+    /// <summary>The object behind the Shortlist screen of one manager at one team.</summary>
+    public static InteropReference Shortlist(uint manager, uint team, int game)
     {
         var ids = new Il2CppSystem.Collections.Generic.List<InteropReference.Pair>();
-        ids.Add(new InteropReference.Pair { m_id = KindKey, m_value = DatabaseRecordKind });
+        ids.Add(new InteropReference.Pair { m_id = KindKey, m_value = PersonSearchKind });
         ids.Add(new InteropReference.Pair { m_id = GameKey, m_value = game });
-        ids.Add(new InteropReference.Pair { m_id = RecordKey, m_value = unchecked((int)record) });
-        return new PersonReference(ids);
+        ids.Add(new InteropReference.Pair { m_id = SearchManagerKey, m_value = unchecked((int)manager) });
+        ids.Add(new InteropReference.Pair { m_id = SearchTeamKey, m_value = unchecked((int)team) });
+        ids.Add(new InteropReference.Pair { m_id = SearchTypeKey, m_value = ShortlistSearchType });
+        return new PersonSearchReference(ids);
     }
 
     /// <summary>
-    /// The messages in a list value, with the running game's identifier. The game wraps each list
-    /// item in a value of its own. Each message is copied: the plugin reads from it on a later tick,
-    /// and the game is free to reuse the objects it delivered.
+    /// The messages in a list value, with the running game and the manager they belong to. The game
+    /// wraps each list item in a value of its own. Each message is copied: the plugin reads from it
+    /// on a later tick, and the game is free to reuse the objects it delivered.
     /// </summary>
-    public static (int Game, ListedMessage[] Messages) Messages(TypedValue? list)
+    public static Listing? Listing(TypedValue? list)
     {
-        var boxed = list?.Get();
-        var items = boxed?.TryCast<Il2CppSystem.Collections.IList>();
-        var count = boxed?.TryCast<Il2CppSystem.Collections.ICollection>()?.Count ?? 0;
-        var messages = new List<ListedMessage>(count);
+        var messages = new List<ListedMessage>();
         var game = 0;
-        for (var i = 0; items is not null && i < count; i++)
+        var manager = 0;
+        foreach (var message in References(list) ?? Array.Empty<InteropReference>())
         {
-            var message = items[i]?.TryCast<TypedValue>()?.Get()?.TryCast<InteropReference>();
-            if (message is not null
-                && message.TryGetValue(MessageNumberKey, out var number)
-                && message.TryGetValue(GameKey, out game))
+            if (message.TryGetValue(MessageNumberKey, out var number)
+                && message.TryGetValue(GameKey, out game)
+                && message.TryGetValue(MessageManagerKey, out manager))
             {
                 messages.Add(new ListedMessage(number, new NewsItemReference(CopyOf(message.m_id))));
             }
         }
 
-        return (game, messages.ToArray());
+        return messages.Count == 0 ? null : new Listing(game, unchecked((uint)manager), messages);
+    }
+
+    /// <summary>
+    /// The database records a value stands for: one for a game object, one each for a list of them.
+    /// Null for any other value, and for a list that has items but no records, which is a list of
+    /// something the plugin does not understand.
+    /// </summary>
+    public static IReadOnlyList<uint>? Records(TypedValue value)
+    {
+        if (References(value) is not { } references)
+        {
+            return null;
+        }
+
+        var records = new List<uint>(references.Count);
+        foreach (var reference in references)
+        {
+            if (TryGetRecord(reference, out var record))
+            {
+                records.Add(record);
+            }
+        }
+
+        return references.Count > 0 && records.Count == 0 ? null : records;
+    }
+
+    // The game objects a value holds: itself, or the items of a list. Null when it holds neither.
+    private static IReadOnlyList<InteropReference>? References(TypedValue? value)
+    {
+        var boxed = value?.Get();
+        if (boxed?.TryCast<InteropReference>() is { } single)
+        {
+            return new[] { single };
+        }
+
+        var items = boxed?.TryCast<Il2CppSystem.Collections.IList>();
+        var collection = boxed?.TryCast<Il2CppSystem.Collections.ICollection>();
+        if (items is null || collection is null)
+        {
+            return null;
+        }
+
+        var references = new List<InteropReference>(collection.Count);
+        for (var i = 0; i < collection.Count; i++)
+        {
+            if (items[i]?.TryCast<TypedValue>()?.Get()?.TryCast<InteropReference>() is { } reference)
+            {
+                references.Add(reference);
+            }
+        }
+
+        return references;
     }
 
     private static Il2CppSystem.Collections.Generic.List<InteropReference.Pair> CopyOf(

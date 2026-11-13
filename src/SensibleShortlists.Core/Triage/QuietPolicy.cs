@@ -12,8 +12,7 @@ public static class QuietPolicy
             || facts.Responded is not { } responded
             || facts.Priority is not { } priority
             || facts.Forwarded is not { } forwarded
-            || facts.Title is null
-            || facts.Shortlisted.Values.Any(answer => answer is null))
+            || facts.Title is null)
         {
             return Verdict.Keep("unreadable");
         }
@@ -48,7 +47,19 @@ public static class QuietPolicy
             return Verdict.Keep("own club");
         }
 
-        return facts.Shortlisted.Values.Any(answer => answer == true)
+        // The shortlist only matters once a message names someone who could be on it.
+        var people = facts.Links.Where(link => link.IsPerson).ToArray();
+        if (people.Length == 0)
+        {
+            return Verdict.Keep("no shortlisted player");
+        }
+
+        if (facts.Shortlist is not { } shortlist)
+        {
+            return Verdict.Keep("shortlist unreadable");
+        }
+
+        return people.Any(person => shortlist.Contains(person.Record))
             ? Verdict.Quiet
             : Verdict.Keep("no shortlisted player");
     }

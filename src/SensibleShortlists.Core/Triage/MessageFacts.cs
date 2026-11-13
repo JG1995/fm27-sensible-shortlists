@@ -6,7 +6,7 @@ namespace SensibleShortlists.Core.Triage;
 /// </summary>
 /// <param name="Title">The title as plain text.</param>
 /// <param name="Links">The records the title links to, in order.</param>
-/// <param name="Shortlisted">For each linked person, whether they are on the manager's shortlist.</param>
+/// <param name="Shortlist">The people on the manager's shortlist when the message was listed.</param>
 public sealed record MessageFacts(
     long Id,
     bool? CanRespond,
@@ -15,4 +15,4 @@ public sealed record MessageFacts(
     bool? Forwarded,
     string? Title,
     IReadOnlyList<RecordLink> Links,
-    IReadOnlyDictionary<uint, bool?> Shortlisted);
+    IReadOnlySet<uint>? Shortlist);
