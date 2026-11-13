@@ -36,7 +36,7 @@ public static class TraceText
                 '\r' => @"\r",
                 '\n' => @"\n",
                 '\t' => @"\t",
-                < ' ' => $@"\x{(int)character:X2}",
+                _ when char.IsControl(character) => $@"\x{(int)character:X2}",
                 _ => character.ToString(),
             });
         }

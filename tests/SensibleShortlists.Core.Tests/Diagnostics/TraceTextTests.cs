@@ -23,6 +23,13 @@ public class TraceTextTests
     }
 
     [Fact]
+    public void Control_characters_above_the_ascii_range_are_escaped_too()
+    {
+        // U+0085 is "next line": some tools break a line on it, which would split a record.
+        Assert.Equal(@"a\x7Fb\x85c", TraceText.Sanitize("a\u007Fb\u0085c"));
+    }
+
+    [Fact]
     public void Text_at_the_limit_is_unchanged()
     {
         var text = new string('x', TraceText.MaxLength);
