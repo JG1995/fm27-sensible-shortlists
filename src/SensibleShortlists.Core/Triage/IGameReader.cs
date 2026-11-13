@@ -11,4 +11,7 @@ public interface IGameReader
 
     /// <summary>Reads from the object behind the Shortlist screen of one manager at one team.</summary>
     void ReadShortlist(uint manager, uint team, string property, Action<GameValue?> onValue);
+
+    /// <summary>Reads a property of a person that the game answers relative to a team.</summary>
+    void ReadPersonInTeam(uint person, uint team, string property, Action<GameValue?> onValue);
 }
