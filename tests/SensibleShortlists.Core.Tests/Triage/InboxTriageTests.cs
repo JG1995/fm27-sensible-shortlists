@@ -11,9 +11,11 @@ public class InboxTriageTests
 
     private readonly FakeGame _game = new();
     private readonly List<string> _lines = new();
-    private readonly InboxTriage _triage;
+    private InboxTriage _triage;
 
-    public InboxTriageTests() => _triage = new InboxTriage(_game, new ListSink(_lines));
+    public InboxTriageTests() => _triage = Triage(TriageMode.Observe);
+
+    private InboxTriage Triage(TriageMode mode) => new(_game, _game, new ListSink(_lines), mode);
 
     private static string NoiseTitle =>
         $"{GameText.Link(GameText.Brighton, "Brighton")} make offer for {GameText.Link(GameText.Player, "King")}";
@@ -21,8 +23,9 @@ public class InboxTriageTests
     private void List(params long[] ids) => _triage.MessagesListed(new Listing(
         Game, Manager, ids.Select(id => new ListedMessage(id, $"message {id}")).ToArray()));
 
-    private void AnswerFacts(long id, string title, bool canRespond = false, bool? forwarded = true)
+    private void AnswerFacts(long id, string title, bool canRespond = false, bool? forwarded = true, bool? read = true)
     {
+        _game.Answer($"message {id}", "NewsItemHasBeenRead", read is { } isRead ? Flag(isRead) : null);
         _game.Answer($"message {id}", "CanRespond", Flag(canRespond));
         _game.Answer($"message {id}", "NewsHasResponded", Flag(false));
         _game.Answer($"message {id}", "NewsItemIsPriority", Flag(false));
@@ -51,7 +54,7 @@ public class InboxTriageTests
             {
                 "TEAM 24:565",
                 "SHORTLIST 2 people",
-                "MESSAGE 12849 QUIET forwarded=True respond=False responded=False priority=False "
+                "MESSAGE 12849 QUIET forwarded=True respond=False responded=False priority=False read=True "
                 + "links=24:504,1:155126* title=\"Brighton make offer for King\"",
             },
             _lines);
@@ -108,6 +111,77 @@ public class InboxTriageTests
         _game.Answer(GameText.Player, "IsShortlisted", null);
 
         Assert.Equal("PERSON 1:155126 IsShortlisted=?", _lines.Last());
+    }
+
+    private void ListAQuietMessage(long id, bool? read)
+    {
+        _triage.ManagerTeamSeen(GameText.ManagerTeam);
+        List(id);
+        AnswerFacts(id, NoiseTitle, read: read);
+        AnswerShortlist(GameText.Player);
+    }
+
+    [Fact]
+    public void In_quiet_mode_an_unread_quiet_message_is_marked_read_once()
+    {
+        _triage = Triage(TriageMode.Quiet);
+
+        ListAQuietMessage(12849, read: false);
+        List(12849);
+
+        Assert.Equal(new object[] { "message 12849" }, _game.Marked);
+        Assert.Contains(_lines, line => line.StartsWith("MESSAGE 12849 QUIET ") && line.Contains(" read=False "));
+    }
+
+    [Theory]
+    [InlineData(true, "MARK 12849 read=True")]
+    [InlineData(false, "MARK 12849 read=False")]
+    [InlineData(null, "MARK 12849 read=?")]
+    public void What_the_game_says_about_a_marked_message_afterwards_is_recorded(bool? readAfterwards, string line)
+    {
+        _triage = Triage(TriageMode.Quiet);
+        ListAQuietMessage(12849, read: false);
+        _lines.Clear();
+
+        _game.Answer("message 12849", "NewsItemHasBeenRead", readAfterwards is { } read ? Flag(read) : null);
+
+        Assert.Equal(new[] { line }, _lines);
+    }
+
+    [Theory]
+    [InlineData(true, " read=True ")]
+    [InlineData(null, " read=? ")]
+    public void A_quiet_message_that_is_read_or_whose_read_state_is_unknown_is_not_marked(bool? read, string shown)
+    {
+        _triage = Triage(TriageMode.Quiet);
+
+        ListAQuietMessage(12849, read);
+
+        Assert.Empty(_game.Marked);
+        Assert.Contains(_lines, line => line.StartsWith("MESSAGE 12849 QUIET ") && line.Contains(shown));
+    }
+
+    [Fact]
+    public void A_kept_message_is_not_marked_even_when_it_is_unread()
+    {
+        _triage = Triage(TriageMode.Quiet);
+        _triage.ManagerTeamSeen(GameText.ManagerTeam);
+        List(1);
+        AnswerFacts(1, NoiseTitle, canRespond: true, read: false);
+        AnswerShortlist(GameText.Player);
+
+        Assert.Contains(_lines, line => line.StartsWith("MESSAGE 1 KEEP(can respond) "));
+        Assert.Empty(_game.Marked);
+    }
+
+    [Fact]
+    public void In_observe_mode_nothing_is_marked()
+    {
+        ListAQuietMessage(12849, read: false);
+
+        Assert.Contains(_lines, line => line.StartsWith("MESSAGE 12849 QUIET "));
+        Assert.Empty(_game.Marked);
+        Assert.DoesNotContain(_lines, line => line.StartsWith("MARK "));
     }
 
     [Fact]
@@ -187,7 +261,7 @@ public class InboxTriageTests
             new[]
             {
                 "SHORTLIST ?",
-                "MESSAGE 1 KEEP(shortlist unreadable) forwarded=True respond=False responded=False priority=False "
+                "MESSAGE 1 KEEP(shortlist unreadable) forwarded=True respond=False responded=False priority=False read=True "
                 + "links=24:504,1:155126? title=\"Brighton make offer for King\"",
             },
             _lines.Skip(1));
@@ -216,7 +290,7 @@ public class InboxTriageTests
             new[]
             {
                 "SHORTLIST ?",
-                "MESSAGE 1 KEEP(team unknown) forwarded=True respond=False responded=False priority=False "
+                "MESSAGE 1 KEEP(team unknown) forwarded=True respond=False responded=False priority=False read=True "
                 + "links=24:504,1:155126? title=\"Brighton make offer for King\"",
             },
             _lines);
@@ -247,7 +321,7 @@ public class InboxTriageTests
         AnswerShortlist(GameText.Player);
 
         Assert.Equal(
-            "MESSAGE 1 KEEP(unreadable) forwarded=? respond=False responded=False priority=False "
+            "MESSAGE 1 KEEP(unreadable) forwarded=? respond=False responded=False priority=False read=True "
             + "links=24:504,1:155126* title=\"Brighton make offer for King\"",
             _lines.Last());
     }
@@ -261,6 +335,7 @@ public class InboxTriageTests
         _game.Answer("message 1", "NewsHasResponded", Flag(false));
         _game.Answer("message 1", "NewsItemIsPriority", Flag(false));
         _game.Answer("message 1", "IsForwarded", Flag(true));
+        _game.Answer("message 1", "NewsItemHasBeenRead", Flag(true));
         _game.Answer("message 1", "NewsTitleString", null);
         AnswerShortlist();
 
@@ -323,7 +398,7 @@ public class InboxTriageTests
     }
 
     /// <summary>Stands in for the game: collects reads and lets a test answer them later.</summary>
-    private sealed class FakeGame : IGameReader
+    private sealed class FakeGame : IGameReader, IGameCommands
     {
         private static readonly object NoImmediateAnswer = new();
 
@@ -335,6 +410,10 @@ public class InboxTriageTests
         public int ReadCount => _asked.Count;
 
         public (uint Manager, uint Team)? ShortlistAskedOf { get; private set; }
+
+        public List<object> Marked { get; } = new();
+
+        public void MarkRead(object message) => Marked.Add(message);
 
         public void ReadMessage(object message, string property, Action<GameValue?> onValue) =>
             Read(message, property, onValue);

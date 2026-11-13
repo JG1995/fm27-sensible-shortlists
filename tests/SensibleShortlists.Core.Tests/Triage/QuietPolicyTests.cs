@@ -11,6 +11,7 @@ public class QuietPolicyTests
         Responded: false,
         Priority: false,
         Forwarded: true,
+        Read: null,
         Title: "Brighton make offer for King",
         Links: new[] { new RecordLink(GameText.Brighton), new RecordLink(GameText.Player) },
         Shortlist: new HashSet<uint> { GameText.Player });
@@ -22,6 +23,15 @@ public class QuietPolicyTests
     public void A_forwarded_story_about_a_shortlisted_player_elsewhere_is_quiet()
     {
         Assert.Equal("QUIET", Judge(Noise));
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    [InlineData(null)]
+    public void Whether_the_message_was_read_does_not_change_the_verdict(bool? read)
+    {
+        Assert.Equal("QUIET", Judge(Noise with { Read = read }));
     }
 
     [Fact]

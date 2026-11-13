@@ -8,19 +8,21 @@ namespace SensibleShortlists.Plugin.Game.Triage;
 
 /// <summary>
 /// Connects the inbox triage to the game. It listens for the channels that carry the inbox and the
-/// manager's team, hands what arrives on them to the triage, and routes the answers to the
-/// plugin's own reads back to whoever asked.
+/// manager's team, hands what arrives on them to the triage, routes the answers to the plugin's
+/// own reads back to whoever asked, and sends the triage's commands on the game's tick.
 /// </summary>
 internal sealed class TriageObserver : IInteropObserver
 {
     private readonly InboxWatch _watch = new();
     private readonly InboxTriage _triage;
     private readonly ChannelReader _reader;
+    private readonly GameCommands _commands;
 
-    public TriageObserver(InboxTriage triage, ChannelReader reader)
+    public TriageObserver(InboxTriage triage, ChannelReader reader, GameCommands commands)
     {
         _triage = triage;
         _reader = reader;
+        _commands = commands;
     }
 
     public void ChannelOpened(InteropReference? reference, PropertyID property, ulong key)
@@ -49,5 +51,10 @@ internal sealed class TriageObserver : IInteropObserver
         }
     }
 
-    public void Tick() => _reader.Flush();
+    // Commands first: a read asked for after a command must see what the command changed.
+    public void Tick()
+    {
+        _commands.Flush();
+        _reader.Flush();
+    }
 }

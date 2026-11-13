@@ -58,7 +58,7 @@ The plugin writes `BepInEx/config/fm27.sensibleshortlists.cfg` the first time it
 
 | Section | Setting | Default | Meaning |
 | ------- | ------- | ------- | ------- |
-| `QuietShortlist` | `Mode` | `Off` | `Observe` judges each inbox message and records the verdict to `BepInEx/SensibleShortlists.triage.log`. It changes nothing in the game. |
+| `QuietShortlist` | `Mode` | `Off` | `Observe` judges each inbox message and records the verdict to `BepInEx/SensibleShortlists.triage.log`. It changes nothing in the game. `Quiet` does the same and marks as read each unread message it judges to be shortlist noise. |
 | `Diagnostics` | `TraceInterop` | `false` | Record what the UI sends to and receives from the simulation, to `BepInEx/SensibleShortlists.trace.log`. For development; leave off for normal play. |
 | `Diagnostics` | `TraceNodeGraph` | `false` | With `TraceInterop` on, also record how the UI registers its bindings with the simulation. Large. |
 | `Diagnostics` | `TraceFilter` | `shortlist,message,news,portal` | Comma-separated terms. A property channel is traced when its label contains one of them. Empty traces everything. |
