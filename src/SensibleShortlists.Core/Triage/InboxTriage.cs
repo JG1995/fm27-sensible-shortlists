@@ -32,16 +32,23 @@ public sealed class InboxTriage
     private readonly IGameCommands _commands;
     private readonly ITraceSink _log;
     private readonly TriageMode _mode;
+    private readonly IVerdictListener? _listener;
     private readonly HashSet<long> _started = new();
     private uint? _managerTeam;
     private long? _runningGame;
 
-    public InboxTriage(IGameReader game, IGameCommands commands, ITraceSink log, TriageMode mode)
+    public InboxTriage(
+        IGameReader game,
+        IGameCommands commands,
+        ITraceSink log,
+        TriageMode mode,
+        IVerdictListener? listener = null)
     {
         _game = game;
         _commands = commands;
         _log = log;
         _mode = mode;
+        _listener = listener;
     }
 
     public void ManagerTeamSeen(uint record)
@@ -63,6 +70,7 @@ public sealed class InboxTriage
         {
             _started.Clear();
             _managerTeam = null;
+            _listener?.Forget();
             _log.Write($"NOTE game {listing.Game}");
         }
 
@@ -77,6 +85,13 @@ public sealed class InboxTriage
         // One read of the manager's club serves every message of the listing. It is read again for
         // the next listing: managers change clubs.
         var club = new ManagerClubRead(this, listing.Manager);
+        // The listener hears of every new message before any is judged: a game that answers at
+        // once must not have a verdict arrive ahead of the news that a verdict is awaited.
+        foreach (var message in unseen)
+        {
+            _listener?.Awaiting(message.Id);
+        }
+
         foreach (var message in unseen)
         {
             new Gathering(this, listing.Game, message, club).Start();
@@ -94,8 +109,10 @@ public sealed class InboxTriage
             $"MESSAGE {facts.Id} {verdict} forwarded={Show(facts.Forwarded)} responded={Show(facts.Responded)} "
             + $"priority={Show(facts.Priority)} read={Show(facts.Read)} links={links} title={title}");
 
+        _listener?.Judged(facts.Id, verdict);
+
         // Only a message known to be unread is touched: an unknown is not a no.
-        if (_mode == TriageMode.Quiet && verdict.IsQuiet && facts.Read == false)
+        if (_mode.MarksRead() && verdict.IsQuiet && facts.Read == false)
         {
             MarkRead(message);
         }

@@ -1,4 +1,5 @@
 using BepInEx.Logging;
+using FM.UI;
 using SensibleShortlists.Core.Diagnostics;
 using SI.Bindable.Reference.Core;
 using SI.Core;
@@ -8,7 +9,7 @@ namespace SensibleShortlists.Plugin.Game.Hooks;
 
 /// <summary>
 /// The one place the game is hooked. The hooks hand what they see to this feed, and the feed hands
-/// it to each observer. Nothing may escape from here into the game: an exception thrown into
+/// it to each observer, in the order the observers were given. Nothing may escape from here into the game: an exception thrown into
 /// IL2CPP code can take the process down, so each observer fails on its own and is reported once.
 /// </summary>
 internal static class InteropFeed
@@ -46,8 +47,14 @@ internal static class InteropFeed
             (reference, property, key),
             static (observer, c) => observer.ChannelOpened(c.reference, c.property, c.key));
 
-    public static void ValuesDelivered(ulong[] keys, Il2CppSystem.Collections.Generic.List<TypedValue> values) =>
-        Publish(nameof(ValuesDelivered), (keys, values), static (observer, v) => observer.ValuesDelivered(v.keys, v.values));
+    public static void ValuesDelivered(
+        InteropDataHandler handler,
+        ulong[] keys,
+        Il2CppSystem.Collections.Generic.List<TypedValue> values) =>
+        Publish(
+            nameof(ValuesDelivered),
+            (handler, keys, values),
+            static (observer, v) => observer.ValuesDelivered(v.handler, v.keys, v.values));
 
     public static void Tick()
     {

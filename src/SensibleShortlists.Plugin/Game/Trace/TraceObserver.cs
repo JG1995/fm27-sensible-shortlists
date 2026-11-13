@@ -1,3 +1,4 @@
+using FM.UI;
 using SensibleShortlists.Core.Diagnostics;
 using SensibleShortlists.Plugin.Game.Hooks;
 using SI.Bindable.Reference.Core;
@@ -30,7 +31,7 @@ internal sealed class TraceObserver : IInteropObserver
         _session.ChannelOpened(key, GameDescriber.Reference(reference), GameDescriber.Property(property));
 
     // The static describer keeps this allocation-free for values that are not traced, which is nearly all.
-    public void ValuesDelivered(ulong[] keys, Il2CppSystem.Collections.Generic.List<TypedValue> values) =>
+    public void ValuesDelivered(InteropDataHandler handler, ulong[] keys, Il2CppSystem.Collections.Generic.List<TypedValue> values) =>
         _session.ValuesDelivered(keys, new GameList(values), static value => GameDescriber.Value(value));
 
     public void BeforeSend()
