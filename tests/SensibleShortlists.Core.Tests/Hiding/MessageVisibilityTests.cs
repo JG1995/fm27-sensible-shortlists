@@ -135,6 +135,19 @@ public class MessageVisibilityTests
     }
 
     [Fact]
+    public void Only_forgetting_starts_another_career()
+    {
+        var career = _visibility.Career;
+
+        _visibility.Awaiting(1);
+        _visibility.Judged(1, Verdict.Quiet);
+        Assert.Equal(career, _visibility.Career);
+
+        _visibility.Forget();
+        Assert.NotEqual(career, _visibility.Career);
+    }
+
+    [Fact]
     public void The_version_moves_only_when_what_is_shown_may_have_changed()
     {
         var start = _visibility.Version;

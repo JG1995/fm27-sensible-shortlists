@@ -28,8 +28,12 @@ internal sealed class ScreenObserver : IInteropObserver
 
     public void ChannelOpened(InteropReference? reference, PropertyID property, ulong key)
     {
-        _values.Forget(key);
-        _screen.ChannelOpened(key, GameDescriber.Property(property));
+        // Runs for every binding in the game. Only a key that carried the inbox has anything to forget.
+        var carried = _screen.RoleOf(key) != ScreenRole.None;
+        if (_screen.ChannelOpened(key, GameDescriber.Property(property)) != ScreenRole.None || carried)
+        {
+            _values.Forget(key);
+        }
     }
 
     public void ValuesDelivered(InteropDataHandler handler, ulong[] keys, Il2CppSystem.Collections.Generic.List<TypedValue> values)
@@ -75,8 +79,9 @@ internal sealed class ScreenObserver : IInteropObserver
                 {
                     if (!_writer.TrySet(update.Key, ValueFor(update)))
                     {
+                        // The binding no longer exists.
                         _values.Forget(update.Key);
-                        _screen.BindingGone(update.Key);
+                        _screen.Forget(update.Key);
                     }
                 }
             }
@@ -107,7 +112,8 @@ internal sealed class ScreenObserver : IInteropObserver
                 return _screen.PositionDelivered(key, position) is { } moved ? ScreenValues.Position(moved) : null;
 
             default:
-                _screen.NotUnderstood(key);
+                // Not what the channel carries. What was delivered on it before no longer stands.
+                _screen.Forget(key);
                 return null;
         }
     }

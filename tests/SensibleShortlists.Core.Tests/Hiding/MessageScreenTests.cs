@@ -210,27 +210,84 @@ public class MessageScreenTests
     }
 
     [Fact]
-    public void A_value_that_was_not_understood_makes_the_channel_forget_its_delivery()
+    public void A_channel_told_to_forget_is_given_nothing_until_the_game_delivers_again()
     {
-        _visibility.Awaiting(1);
-        _screen.ListDelivered(Inbox, Messages(1));
-        _screen.NotUnderstood(Inbox);
-
         Keep(1);
+        _visibility.Awaiting(2);
+        _screen.ListDelivered(Inbox, Messages(2, 1));
+        _screen.MessageToOpenDelivered(ToOpen, 2);
+        _screen.PositionDelivered(Position, 1);
+        _screen.Forget(Inbox);
+        _screen.Forget(ToOpen);
+        _screen.Forget(Position);
+
+        Keep(2);
+
+        Assert.Empty(_screen.Refresh());
+        Assert.Equal(ScreenRole.InboxList, _screen.RoleOf(Inbox));
+    }
+
+    [Fact]
+    public void Nothing_delivered_for_one_career_is_given_to_the_screen_in_another()
+    {
+        Keep(1);
+        _visibility.Awaiting(2);
+        _screen.ListDelivered(Inbox, Messages(2, 1));
+        _screen.ListDelivered(Incoming, Messages(2));
+        _screen.MessageToOpenDelivered(ToOpen, 2);
+        _screen.PositionDelivered(Position, 1);
+
+        _visibility.Forget();
 
         Assert.Empty(_screen.Refresh());
     }
 
     [Fact]
-    public void A_channel_whose_binding_is_gone_is_given_nothing_more()
+    public void Another_careers_inbox_does_not_stand_in_for_this_ones()
     {
-        _visibility.Awaiting(1);
-        _screen.ListDelivered(Inbox, Messages(1));
-        _screen.BindingGone(Inbox);
-
+        Quiet(2);
         Keep(1);
+        _screen.ListDelivered(Inbox, Messages(2, 1));
+        _visibility.Forget();
+        Quiet(2);
 
+        Assert.Null(_screen.MessageToOpenDelivered(ToOpen, 2));
+        Assert.Null(_screen.PositionDelivered(Position, 1));
+    }
+
+    [Fact]
+    public void A_message_given_in_anothers_place_stays_while_it_is_shown_whatever_the_inbox_lists()
+    {
+        Quiet(3);
+        Keep(2, 1);
+        _screen.ListDelivered(Inbox, Messages(3, 2, 1));
+        _screen.MessageToOpenDelivered(ToOpen, 3);
+        _screen.Refresh();
+
+        // The global search narrows the inbox list, then finds nothing.
+        _screen.ListDelivered(Inbox, Messages(1));
         Assert.Empty(_screen.Refresh());
+        _screen.ListDelivered(Inbox, Messages());
+        Assert.Empty(_screen.Refresh());
+
+        // The game repeats its choice while the search is on.
+        Assert.Equal(2, _screen.MessageToOpenDelivered(ToOpen, 3));
+    }
+
+    [Fact]
+    public void A_message_given_in_anothers_place_gives_way_when_it_is_hidden_itself()
+    {
+        Quiet(3);
+        Keep(1);
+        _visibility.Awaiting(2);
+        _now += TimeSpan.FromSeconds(20);
+        _screen.Refresh();
+        _screen.ListDelivered(Inbox, Messages(3, 2, 1));
+        Assert.Equal(2, _screen.MessageToOpenDelivered(ToOpen, 3));
+
+        Quiet(2);
+
+        Assert.Contains(new MessageToOpenUpdate(ToOpen, 1), _screen.Refresh(), UpdateComparer.Instance);
     }
 
     [Fact]
@@ -375,17 +432,14 @@ public class MessageScreenTests
     [Fact]
     public void Lists_are_given_before_the_position_and_the_message_to_open()
     {
-        _visibility.Awaiting(2);
-        Keep(1);
-        _screen.MessageToOpenDelivered(ToOpen, 2);
-        _screen.PositionDelivered(Position, 1);
-        _screen.ListDelivered(Inbox, Messages(2, 1));
-        _screen.Refresh();
-
         Quiet(2);
         _visibility.Awaiting(3);
+        _visibility.Awaiting(1);
         _screen.ListDelivered(Inbox, Messages(3, 2, 1));
-        Keep(3);
+        _screen.MessageToOpenDelivered(ToOpen, 2);
+        _screen.PositionDelivered(Position, 2);
+
+        Keep(3, 1);
 
         Assert.Equal(
             new ScreenUpdate[]
