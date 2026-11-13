@@ -53,23 +53,8 @@ internal sealed class ChannelReader : IGameReader
         _queue.Enqueue((interop => Open(interop, reference, property, onValue), onValue));
     }
 
-    public void ReadShortlist(uint manager, uint team, string property, Action<GameValue?> onValue) =>
-        _queue.Enqueue((
-            interop =>
-            {
-                if (Game is not { } game)
-                {
-                    onValue(null);
-                    return;
-                }
-
-                Open(interop, GameReferences.Shortlist(manager, team, game), property, onValue);
-            },
-            onValue));
-
-    // A person's own reference is enough: in the session of 2026-11-13 the game answered a read on
-    // it the same whether or not the manager's team rode along, and the same as it answered its
-    // own screens for 14 of the 15 people both asked about.
+    // A person's own reference is enough: the game answers a read on it without knowing which
+    // screen or team is asking.
     public void ReadPerson(uint person, string property, Action<GameValue?> onValue) =>
         _queue.Enqueue((
             interop =>
@@ -160,19 +145,17 @@ internal sealed class ChannelReader : IGameReader
         // whose records cannot be read still gives its text.
         string? text = null;
         IReadOnlyList<uint>? records = null;
-        IReadOnlyList<string>? flags = null;
         try
         {
             text = value?.AsString();
             records = value is null ? null : GameReferences.Records(value);
-            flags = value is null ? null : GameReferences.StatusFlags(value);
         }
         catch (Exception exception)
         {
             InteropFeed.ReportFirstFailure(nameof(ChannelReader), exception);
         }
 
-        return _waiting.Answer(key, text is null ? null : new GameValue(text, records, flags));
+        return _waiting.Answer(key, text is null ? null : new GameValue(text, records));
     }
 
     private void Open(GameInteropSubsystem interop, InteropReference target, string property, Action<GameValue?> onValue)

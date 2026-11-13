@@ -2,7 +2,6 @@ using System.Runtime.CompilerServices;
 using FM.UI;
 using SensibleShortlists.Core.Triage;
 using SI.Bindable;
-using SI.Bindable.Reference.Core;
 using SI.Core;
 using SI.Interop;
 
@@ -24,12 +23,6 @@ internal static class GameReferences
     // What this pair says is not known. It is 0 on every message the inbox lists and on every
     // message the game has been seen to mark read.
     private static readonly uint MessagePeayKey = Code("peay");
-    private static readonly uint SearchManagerKey = Code("Hhum");
-    private static readonly uint SearchTeamKey = Code("Ttea");
-    private static readonly uint SearchTypeKey = Code("type");
-
-    // The property of a status flag's record that holds the flag's number.
-    private const string StatusFlagProperty = "StatusFlag";
 
     // The kind every reference to a database record carries, person and team alike.
     private const int DatabaseRecordKind = 28;
@@ -37,9 +30,6 @@ internal static class GameReferences
     // The kind a reference to an inbox message carries.
     private const int NewsItemKind = 70;
 
-    // The kind a person-search reference carries, and the search type of the Shortlist screen.
-    private const int PersonSearchKind = 73;
-    private const int ShortlistSearchType = 0;
 
     /// <summary>A binding key is one 64-bit number in a struct; reading it directly avoids a native call.</summary>
     public static ulong KeyNumber(ref Bindings.Key key) => Unsafe.As<Bindings.Key, ulong>(ref key);
@@ -61,18 +51,6 @@ internal static class GameReferences
         ids.Add(new InteropReference.Pair { m_id = GameKey, m_value = game });
         ids.Add(new InteropReference.Pair { m_id = RecordKey, m_value = unchecked((int)record) });
         return new PersonReference(ids);
-    }
-
-    /// <summary>The object behind the Shortlist screen of one manager at one team.</summary>
-    public static InteropReference Shortlist(uint manager, uint team, int game)
-    {
-        var ids = new Il2CppSystem.Collections.Generic.List<InteropReference.Pair>();
-        ids.Add(new InteropReference.Pair { m_id = KindKey, m_value = PersonSearchKind });
-        ids.Add(new InteropReference.Pair { m_id = GameKey, m_value = game });
-        ids.Add(new InteropReference.Pair { m_id = SearchManagerKey, m_value = unchecked((int)manager) });
-        ids.Add(new InteropReference.Pair { m_id = SearchTeamKey, m_value = unchecked((int)team) });
-        ids.Add(new InteropReference.Pair { m_id = SearchTypeKey, m_value = ShortlistSearchType });
-        return new PersonSearchReference(ids);
     }
 
     /// <summary>
@@ -144,56 +122,6 @@ internal static class GameReferences
         }
 
         return itemCount > 0 && records.Count == 0 ? null : records;
-    }
-
-    /// <summary>
-    /// The status flags in a list value, as the game names them. The game hands a player's status
-    /// over as a list of records, one per flag, and its own screens read the flag's number from the
-    /// record's <c>StatusFlag</c> property. Null when the value is not such a list.
-    /// </summary>
-    public static IReadOnlyList<string>? StatusFlags(TypedValue value)
-    {
-        var boxed = value.Get();
-        if (boxed?.TryCast<Il2CppSystem.Collections.IList>() is not { } items
-            || boxed.TryCast<Il2CppSystem.Collections.ICollection>() is not { } collection)
-        {
-            return null;
-        }
-
-        var flags = new List<string>();
-        for (var i = 0; i < collection.Count; i++)
-        {
-            if (items[i]?.TryCast<TypedValue>()?.Get()?.TryCast<Record>() is not { } record || StatusFlag(record) is not { } flag)
-            {
-                return null;
-            }
-
-            flags.Add(flag);
-        }
-
-        return flags;
-    }
-
-    // Names come from the game's own enum, so they follow the game when it updates. A number the
-    // enum does not know is given as the number.
-    private static string? StatusFlag(Record record)
-    {
-        var entries = record.GetEnumerator();
-        while (entries.MoveNext())
-        {
-            var entry = entries.Current;
-            if (InboxWatch.NameOf(GameDescriber.Property(new PropertyID { id = entry.Key })) != StatusFlagProperty)
-            {
-                continue;
-            }
-
-            var text = entry.Value?.AsString();
-            return int.TryParse(text, out var number) && Enum.IsDefined(typeof(PlayerStatusFlag), number)
-                ? ((PlayerStatusFlag)number).ToString()
-                : text;
-        }
-
-        return null;
     }
 
     // The game objects a value holds: itself, or those among the items of a list. Null when it is

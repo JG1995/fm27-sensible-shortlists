@@ -7,6 +7,8 @@ internal static class GameText
 {
     public const uint Brighton = (24u << 24) | 504;
     public const uint ManagerTeam = (24u << 24) | 565;
+    public const uint ManagerClub = (3u << 24) | 439;
+    public const uint BrightonClub = (3u << 24) | 504;
     public const uint Player = (1u << 24) | 155126;
     public const uint OtherPlayer = (1u << 24) | 95733;
 

@@ -19,27 +19,20 @@ public sealed record Listing(long Game, uint Manager, IReadOnlyList<ListedMessag
 /// <remarks>Not thread-safe: the game calls its UI on one thread, and so everything arrives on it.</remarks>
 public sealed class InboxTriage
 {
-    // The person-search object of type 0 is the one behind the Shortlist screen.
-    private const string IsShortlistProperty = "PersonSearchIsShortlist";
-    private const string PeopleProperty = "PersonList";
-
     private const string ReadProperty = "NewsItemHasBeenRead";
 
-    // Candidates for telling that a person is on any of the manager's shortlists, not only the
-    // selected one. Which of them the game answers, and what the answers mean, is what a live
-    // session has to show; until then they are recorded beside the verdicts and feed none.
-    private static readonly string[] PersonProbes =
-    {
-        "PlayerStatusFlagsForTeam", "PlayerStatusFlagsForRecruitment", "PlayerStatus", "DaysLeftOnShortlist",
-        "IsShortlisted", "IsBeingScouted", "PersonIsTransferTarget",
-    };
+    // The club a person plays for, and the club that holds the person's contract. A player out on
+    // loan belongs to both.
+    private static readonly string[] ClubProperties = { "Club", "ContractClub" };
+
+    // For a manager, the club managed.
+    private const string ManagerClubProperty = "Club";
 
     private readonly IGameReader _game;
     private readonly IGameCommands _commands;
     private readonly ITraceSink _log;
     private readonly TriageMode _mode;
     private readonly HashSet<long> _started = new();
-    private readonly HashSet<uint> _peopleAsked = new();
     private uint? _managerTeam;
     private long? _runningGame;
 
@@ -69,7 +62,6 @@ public sealed class InboxTriage
         if (_runningGame is { } known && known != listing.Game)
         {
             _started.Clear();
-            _peopleAsked.Clear();
             _managerTeam = null;
             _log.Write($"NOTE game {listing.Game}");
         }
@@ -82,34 +74,31 @@ public sealed class InboxTriage
             return;
         }
 
-        // One read of the shortlist serves every message of the listing. It is read again for the
-        // next listing, because the manager changes it between them.
-        var shortlist = new ShortlistRead(this, listing.Manager);
+        // One read of the manager's club serves every message of the listing. It is read again for
+        // the next listing: managers change clubs.
+        var club = new ManagerClubRead(this, listing.Manager);
         foreach (var message in unseen)
         {
-            new Gathering(this, message, shortlist).Start();
+            new Gathering(this, message, club).Start();
         }
 
-        shortlist.Start();
+        club.Start();
     }
 
-    private void Judge(ListedMessage message, MessageFacts facts)
+    private void Judge(ListedMessage message, MessageFacts facts, uint? managerClub)
     {
-        var verdict = QuietPolicy.Judge(facts, _managerTeam);
-        var links = string.Join(",", facts.Links.Select(link => link + Mark(facts, link)));
+        var verdict = QuietPolicy.Judge(facts, _managerTeam, managerClub);
+        var links = string.Join(",", facts.Links.Select(link => link + Mark(facts, link, managerClub)));
         var title = facts.Title is null ? "?" : $"\"{TraceText.Sanitize(facts.Title)}\"";
         _log.Write(
-            $"MESSAGE {facts.Id} {verdict} forwarded={Show(facts.Forwarded)} respond={Show(facts.CanRespond)} "
-            + $"responded={Show(facts.Responded)} priority={Show(facts.Priority)} read={Show(facts.Read)} "
-            + $"links={links} title={title}");
+            $"MESSAGE {facts.Id} {verdict} forwarded={Show(facts.Forwarded)} responded={Show(facts.Responded)} "
+            + $"priority={Show(facts.Priority)} read={Show(facts.Read)} links={links} title={title}");
 
         // Only a message known to be unread is touched: an unknown is not a no.
         if (_mode == TriageMode.Quiet && verdict.IsQuiet && facts.Read == false)
         {
             MarkRead(message);
         }
-
-        ProbePeople(facts);
     }
 
     // The game is asked afterwards what it now says, so the record shows whether it obeyed.
@@ -119,106 +108,66 @@ public sealed class InboxTriage
         _game.ReadMessage(message.Handle, ReadProperty, value => _log.Write($"MARK {message.Id} read={Show(value?.AsFlag())}"));
     }
 
-    private void ProbePeople(MessageFacts facts)
-    {
-        foreach (var person in facts.Links.Where(link => link.IsPerson && _peopleAsked.Add(link.Record)))
-        {
-            foreach (var property in PersonProbes)
-            {
-                _game.ReadPerson(person.Record, property, value => _log.Write($"PERSON {person} {property}={Show(value)}"));
-            }
-        }
-    }
-
-    private static string Show(GameValue? value)
-    {
-        if (value?.Flags is { } flags)
-        {
-            return $"[{string.Join(",", flags.Select(TraceText.Sanitize))}]";
-        }
-
-        return value?.Text is { } text ? TraceText.Sanitize(text) : "?";
-    }
-
-    private static string Mark(MessageFacts facts, RecordLink link)
+    // "!" after a person who belongs to the manager's club, "?" after one whose clubs are unreadable.
+    private static string Mark(MessageFacts facts, RecordLink link, uint? managerClub)
     {
         if (!link.IsPerson)
         {
             return string.Empty;
         }
 
-        return facts.Shortlist is null ? "?" : facts.Shortlist.Contains(link.Record) ? "*" : string.Empty;
+        if (facts.Clubs.GetValueOrDefault(link.Record) is not { } clubs)
+        {
+            return "?";
+        }
+
+        return managerClub is { } club && clubs.Contains(club) ? "!" : string.Empty;
     }
 
     private static string Show(bool? fact) => fact?.ToString() ?? "?";
 
-    /// <summary>
-    /// The shortlist as it stands for one listing. The game must confirm that the list it hands
-    /// over is the shortlist; a list of anything else would quiet the wrong messages.
-    /// </summary>
-    private sealed class ShortlistRead
+    // The club records in an answer. A value that is not a game object holds none, which is how
+    // the game answers for a person without a club.
+    private static IEnumerable<uint> ClubsIn(GameValue value) =>
+        (value.Records ?? Array.Empty<uint>()).Where(record => new RecordLink(record).IsClub);
+
+    /// <summary>The manager's club as it stands for one listing.</summary>
+    private sealed class ManagerClubRead
     {
         private readonly InboxTriage _triage;
         private readonly uint _manager;
-        private readonly List<Action<IReadOnlySet<uint>?>> _waiting = new();
-        private bool? _isShortlist;
-        private IReadOnlyList<uint>? _people;
-        private int _waitingFor;
+        private readonly List<Action<uint?>> _waiting = new();
         private bool _done;
-        private IReadOnlySet<uint>? _shortlist;
+        private uint? _club;
 
-        public ShortlistRead(InboxTriage triage, uint manager)
+        public ManagerClubRead(InboxTriage triage, uint manager)
         {
             _triage = triage;
             _manager = manager;
         }
 
-        public void Start()
+        public void Start() => _triage._game.ReadPerson(_manager, ManagerClubProperty, value =>
         {
-            if (_triage._managerTeam is not { } team)
+            _club = value is null ? null : ClubsIn(value).Cast<uint?>().FirstOrDefault();
+            _done = true;
+            _triage._log.Write(_club is { } club ? $"CLUB {new RecordLink(club)}" : "CLUB ?");
+            foreach (var use in _waiting)
             {
-                Finish();
-                return;
+                use(_club);
             }
 
-            // Counted before asking: a game that answers at once must not see zero too early.
-            _waitingFor = 2;
-            Ask(team, IsShortlistProperty, value => _isShortlist = value?.AsFlag());
-            Ask(team, PeopleProperty, value => _people = value?.Records);
-        }
+            _waiting.Clear();
+        });
 
-        public void WhenRead(Action<IReadOnlySet<uint>?> use)
+        public void WhenRead(Action<uint?> use)
         {
             if (_done)
             {
-                use(_shortlist);
+                use(_club);
                 return;
             }
 
             _waiting.Add(use);
-        }
-
-        private void Ask(uint team, string property, Action<GameValue?> keep) =>
-            _triage._game.ReadShortlist(_manager, team, property, value =>
-            {
-                keep(value);
-                if (--_waitingFor == 0)
-                {
-                    Finish();
-                }
-            });
-
-        private void Finish()
-        {
-            _shortlist = _isShortlist == true && _people is not null ? _people.ToHashSet() : null;
-            _done = true;
-            _triage._log.Write(_shortlist is null ? "SHORTLIST ?" : $"SHORTLIST {_shortlist.Count} people");
-            foreach (var use in _waiting)
-            {
-                use(_shortlist);
-            }
-
-            _waiting.Clear();
         }
     }
 
@@ -227,8 +176,8 @@ public sealed class InboxTriage
     {
         private readonly InboxTriage _triage;
         private readonly ListedMessage _message;
-        private readonly ShortlistRead _shortlist;
-        private bool? _canRespond;
+        private readonly ManagerClubRead _managerClub;
+        private readonly Dictionary<uint, IReadOnlySet<uint>?> _clubs = new();
         private bool? _responded;
         private bool? _priority;
         private bool? _forwarded;
@@ -236,44 +185,89 @@ public sealed class InboxTriage
         private EmbeddedText? _title;
         private int _waitingFor;
 
-        public Gathering(InboxTriage triage, ListedMessage message, ShortlistRead shortlist)
+        public Gathering(InboxTriage triage, ListedMessage message, ManagerClubRead managerClub)
         {
             _triage = triage;
             _message = message;
-            _shortlist = shortlist;
+            _managerClub = managerClub;
         }
 
         public void Start()
         {
             // Counted before asking: a game that answers at once must not see zero too early.
-            _waitingFor = 6;
-            Ask("CanRespond", value => _canRespond = value?.AsFlag());
+            _waitingFor = 5;
             Ask("NewsHasResponded", value => _responded = value?.AsFlag());
             Ask("NewsItemIsPriority", value => _priority = value?.AsFlag());
             Ask("IsForwarded", value => _forwarded = value?.AsFlag());
             Ask(ReadProperty, value => _read = value?.AsFlag());
-            Ask("NewsTitleString", value => _title = value?.Text is { } text ? EmbeddedText.Parse(text) : null);
+            Ask("NewsTitleString", value =>
+            {
+                _title = value?.Text is { } text ? EmbeddedText.Parse(text) : null;
+                AskForClubs();
+            });
         }
 
         private void Ask(string property, Action<GameValue?> keep) =>
             _triage._game.ReadMessage(_message.Handle, property, value =>
             {
                 keep(value);
-                if (--_waitingFor == 0)
-                {
-                    _shortlist.WhenRead(Finish);
-                }
+                Answered();
             });
 
-        private void Finish(IReadOnlySet<uint>? shortlist) => _triage.Judge(_message, new MessageFacts(
-            _message.Id,
-            _canRespond,
-            _responded,
-            _priority,
-            _forwarded,
-            _read,
-            _title?.Plain,
-            _title?.Links ?? Array.Empty<RecordLink>(),
-            shortlist));
+        // Who the title names is known only once the title has arrived, so these reads follow it.
+        // They are counted while the title's own answer is still being counted, so the count
+        // cannot reach zero in between.
+        private void AskForClubs()
+        {
+            var people = (_title?.Links ?? Array.Empty<RecordLink>())
+                .Where(link => link.IsPerson)
+                .Select(link => link.Record)
+                .Distinct()
+                .ToArray();
+            _waitingFor += people.Length * ClubProperties.Length;
+            foreach (var person in people)
+            {
+                var clubs = new HashSet<uint>();
+                _clubs[person] = clubs;
+                foreach (var property in ClubProperties)
+                {
+                    _triage._game.ReadPerson(person, property, value =>
+                    {
+                        // One unreadable answer makes the person's clubs unreadable, whatever the other says.
+                        if (value is null)
+                        {
+                            _clubs[person] = null;
+                        }
+                        else
+                        {
+                            clubs.UnionWith(ClubsIn(value));
+                        }
+
+                        Answered();
+                    });
+                }
+            }
+        }
+
+        private void Answered()
+        {
+            if (--_waitingFor == 0)
+            {
+                _managerClub.WhenRead(Finish);
+            }
+        }
+
+        private void Finish(uint? managerClub) => _triage.Judge(
+            _message,
+            new MessageFacts(
+                _message.Id,
+                _responded,
+                _priority,
+                _forwarded,
+                _read,
+                _title?.Plain,
+                _title?.Links ?? Array.Empty<RecordLink>(),
+                _clubs),
+            managerClub);
     }
 }
