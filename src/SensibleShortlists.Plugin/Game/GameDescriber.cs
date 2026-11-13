@@ -16,6 +16,8 @@ internal static class GameDescriber
 {
     private const int MaxListItems = 30;
 
+    private static readonly System.Collections.Concurrent.ConcurrentDictionary<uint, string?> PrintedProperties = new();
+
     /// <summary>Names come from the game's own enums, so they follow the game when it updates.</summary>
     public static string? EventName(uint number) =>
         TraceText.Describe(number, static n =>
@@ -28,9 +30,20 @@ internal static class GameDescriber
             return Enum.IsDefined(typeof(ActionID), n) ? ((ActionID)n).ToString() : "?";
         });
 
-    /// <summary>The game prints a property as <c>Name:number</c>, which is all the trace needs.</summary>
-    public static string? Property(PropertyID property) =>
-        TraceText.Describe(property, static id => id.ToString());
+    /// <summary>
+    /// The game prints a property as <c>Name:number</c>. Printing is a call into the game and the
+    /// same properties recur by the thousand, so each is printed once.
+    /// </summary>
+    public static string? Property(PropertyID property)
+    {
+        if (!PrintedProperties.TryGetValue(property.id, out var printed))
+        {
+            printed = TraceText.Describe(property, static id => id.ToString());
+            PrintedProperties[property.id] = printed;
+        }
+
+        return printed;
+    }
 
     public static string? Reference(InteropReference? reference) =>
         TraceText.Describe(reference, static r => r is null ? null : DescribeReference(r));
