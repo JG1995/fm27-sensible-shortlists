@@ -39,6 +39,16 @@ public class TriageModeTests
     }
 
     [Theory]
+    [InlineData(TriageMode.Off, false)]
+    [InlineData(TriageMode.Observe, false)]
+    [InlineData(TriageMode.Quiet, false)]
+    [InlineData(TriageMode.Hide, true)]
+    public void Only_hide_changes_what_the_screen_is_given(TriageMode mode, bool hides)
+    {
+        Assert.Equal(hides, mode.Hides());
+    }
+
+    [Theory]
     [InlineData("Off")]
     [InlineData("")]
     [InlineData(null)]

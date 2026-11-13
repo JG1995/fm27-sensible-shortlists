@@ -30,4 +30,6 @@ public static class TriageModes
     };
 
     public static bool MarksRead(this TriageMode mode) => mode is TriageMode.Quiet or TriageMode.Hide;
+
+    public static bool Hides(this TriageMode mode) => mode == TriageMode.Hide;
 }

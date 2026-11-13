@@ -99,9 +99,23 @@ public sealed class MessageScreen
     public ScreenRole RoleOf(ulong key) => Stopped ? ScreenRole.None : _roles.GetValueOrDefault(key);
 
     /// <summary>
-    /// Drops what the game last delivered on a channel: the delivery was not what the channel
-    /// carries, or the binding it fed no longer exists. Nothing is given on it until the game
-    /// delivers again.
+    /// The game delivered something on the channel that is not what the channel carries. What it
+    /// delivered there before no longer stands, and if the channel carries the inbox list, there
+    /// is no inbox list to point into until the next one arrives.
+    /// </summary>
+    public void NotUnderstood(ulong key)
+    {
+        Forget(key);
+        if (RoleOf(key) == ScreenRole.InboxList)
+        {
+            _inbox = Array.Empty<long?>();
+            _inboxChanged = true;
+        }
+    }
+
+    /// <summary>
+    /// Drops what the game last delivered on a channel, because the binding it fed no longer
+    /// exists. Nothing is given on it until the game delivers again.
     /// </summary>
     public void Forget(ulong key)
     {
@@ -305,7 +319,7 @@ public sealed class MessageScreen
     // The game's choice stands when it can be seen. Otherwise the message given before stands
     // while it can be seen: the inbox list changes with every search, and the message to open must
     // not follow it around. Only then is the first shown message of the inbox offered, and when
-    // the inbox shows nothing, nothing changes.
+    // the inbox shows nothing, the game's choice stands after all.
     private long MessageToOpen(long named, long given)
     {
         if (_visibility.IsShown(named))
@@ -315,7 +329,7 @@ public sealed class MessageScreen
 
         return given != named && _visibility.IsShown(given)
             ? given
-            : _inbox.FirstOrDefault(message => message is { } number && _visibility.IsShown(number)) ?? given;
+            : _inbox.FirstOrDefault(message => message is { } number && _visibility.IsShown(number)) ?? named;
     }
 
     // The game counts places in its own list. The screen's list is shorter by the messages not shown before that place.

@@ -359,6 +359,84 @@ public class MessageScreenTests
     }
 
     [Fact]
+    public void When_the_message_given_in_anothers_place_is_hidden_and_the_inbox_shows_nothing_the_games_choice_returns()
+    {
+        Quiet(3);
+        _visibility.Awaiting(2);
+        _now += TimeSpan.FromSeconds(20);
+        _screen.Refresh();
+        _screen.ListDelivered(Inbox, Messages(3, 2));
+        Assert.Equal(2, _screen.MessageToOpenDelivered(ToOpen, 3));
+
+        Quiet(2);
+
+        Assert.Contains(new MessageToOpenUpdate(ToOpen, 3), _screen.Refresh(), UpdateComparer.Instance);
+        Assert.Null(_screen.MessageToOpenDelivered(ToOpen, 3));
+    }
+
+    [Fact]
+    public void A_release_moves_the_message_to_open_and_the_unread_position_already_given()
+    {
+        Keep(1);
+        _visibility.Awaiting(2);
+        _screen.ListDelivered(Inbox, Messages(2, 1));
+        Assert.Equal(1, _screen.MessageToOpenDelivered(ToOpen, 2));
+        Assert.Equal(0, _screen.PositionDelivered(Position, 1));
+
+        _now += TimeSpan.FromSeconds(20);
+
+        Assert.Equal(
+            new ScreenUpdate[]
+            {
+                new ListUpdate(Inbox, new[] { 0, 1 }),
+                new PositionUpdate(Position, 1),
+                new MessageToOpenUpdate(ToOpen, 2),
+            },
+            _screen.Refresh(),
+            UpdateComparer.Instance);
+    }
+
+    [Fact]
+    public void An_empty_inbox_list_is_the_inbox_from_then_on()
+    {
+        Quiet(2);
+        Keep(1);
+        _screen.ListDelivered(Inbox, Messages(2, 1));
+
+        _screen.ListDelivered(Inbox, Messages());
+
+        Assert.Null(_screen.MessageToOpenDelivered(ToOpen, 2));
+        Assert.Null(_screen.PositionDelivered(Position, 1));
+    }
+
+    [Fact]
+    public void An_inbox_delivery_that_was_not_understood_leaves_no_inbox_to_point_into()
+    {
+        Quiet(2);
+        Keep(1);
+        _screen.ListDelivered(Inbox, Messages(2, 1));
+        _screen.PositionDelivered(Position, 1);
+
+        _screen.NotUnderstood(Inbox);
+
+        Assert.Equal(new ScreenUpdate[] { new PositionUpdate(Position, 1) }, _screen.Refresh(), UpdateComparer.Instance);
+        Assert.Null(_screen.MessageToOpenDelivered(ToOpen, 2));
+    }
+
+    [Fact]
+    public void A_delivery_that_was_not_understood_on_another_channel_leaves_the_inbox_alone()
+    {
+        Quiet(2);
+        Keep(1);
+        _screen.ListDelivered(Inbox, Messages(2, 1));
+
+        _screen.NotUnderstood(Incoming);
+        _screen.NotUnderstood(ToOpen);
+
+        Assert.Equal(1, _screen.MessageToOpenDelivered(ToOpen, 2));
+    }
+
+    [Fact]
     public void A_message_to_open_on_a_channel_that_carries_none_is_left_to_the_game()
     {
         Quiet(2);

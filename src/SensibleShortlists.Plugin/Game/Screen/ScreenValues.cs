@@ -18,6 +18,10 @@ internal sealed class ScreenValues
     private readonly Dictionary<ulong, (TypedValue List, IReadOnlyList<TypedValue> Items)> _lists = new();
     private readonly Dictionary<ulong, (long Message, TypedValue Value)> _named = new();
 
+    // The inbox item last given on a channel in the named message's place. The inbox list moves on
+    // with every search, and the same message may have to be given again after it has left the list.
+    private readonly Dictionary<ulong, (long Message, TypedValue Value)> _standIns = new();
+
     // By message number, from the inbox list the game delivered last.
     private Dictionary<long, TypedValue> _inbox = new();
 
@@ -31,6 +35,11 @@ internal sealed class ScreenValues
         if (value is null || GameReferences.Items(value) is not { } items)
         {
             _lists.Remove(key);
+            if (isInbox)
+            {
+                _inbox = new Dictionary<long, TypedValue>();
+            }
+
             return null;
         }
 
@@ -57,6 +66,7 @@ internal sealed class ScreenValues
         if (value is null || GameReferences.MessageNumber(value) is not { } message)
         {
             _named.Remove(key);
+            _standIns.Remove(key);
             return null;
         }
 
@@ -74,6 +84,7 @@ internal sealed class ScreenValues
     {
         _lists.Remove(key);
         _named.Remove(key);
+        _standIns.Remove(key);
     }
 
     /// <summary>The list last delivered on the channel, reduced to the items at the given places.</summary>
@@ -93,17 +104,34 @@ internal sealed class ScreenValues
         return value;
     }
 
-    /// <summary>A value naming a message: the one the game named on the channel, or one from the inbox list.</summary>
+    /// <summary>
+    /// A value naming a message: the one the game named on the channel, the one given there in its
+    /// place before, or one from the inbox list.
+    /// </summary>
     public TypedValue Message(ulong key, long message)
     {
-        if (_named.TryGetValue(key, out var named) && named.Message == message)
+        _named.TryGetValue(key, out var named);
+        if (named.Value is not null && named.Message == message)
         {
             return TypedValue.CreateCopyFrom(named.Value);
         }
 
-        return _inbox.TryGetValue(message, out var listed)
-            ? TypedValue.CreateCopyFrom(listed)
-            : throw new InvalidOperationException($"Message {message} is not in the inbox list the game delivered last.");
+        if (!_standIns.TryGetValue(key, out var standIn) || standIn.Message != message)
+        {
+            standIn = _inbox.TryGetValue(message, out var listed)
+                ? (message, listed)
+                : throw new InvalidOperationException($"Message {message} is in no inbox list the game has delivered.");
+            _standIns[key] = standIn;
+        }
+
+        // Another career's messages carry the same numbers. A message from one must never be given
+        // where the game named a message of the other.
+        if (named.Value is not null && !GameReferences.SameGame(named.Value, standIn.Value))
+        {
+            throw new InvalidOperationException($"Message {message} was listed for another career.");
+        }
+
+        return TypedValue.CreateCopyFrom(standIn.Value);
     }
 
     // The game makes its own delivered numbers with this same call.
