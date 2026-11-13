@@ -13,7 +13,7 @@ public class QuietPolicyTests
         Forwarded: true,
         Title: "Brighton make offer for King",
         Links: new[] { new RecordLink(GameText.Brighton), new RecordLink(GameText.Player) },
-        Shortlisted: new Dictionary<uint, bool?> { [GameText.Player] = true });
+        Shortlist: new HashSet<uint> { GameText.Player });
 
     private static string Judge(MessageFacts facts, uint? managerTeam = GameText.ManagerTeam) =>
         QuietPolicy.Judge(facts, managerTeam).ToString();
@@ -34,14 +34,6 @@ public class QuietPolicyTests
     public void An_unreadable_title_keeps_the_message()
     {
         Assert.Equal("KEEP(unreadable)", Judge(Noise with { Title = null }));
-    }
-
-    [Fact]
-    public void An_unreadable_shortlist_answer_keeps_the_message()
-    {
-        var facts = Noise with { Shortlisted = new Dictionary<uint, bool?> { [GameText.Player] = null } };
-
-        Assert.Equal("KEEP(unreadable)", Judge(facts));
     }
 
     [Fact]
@@ -86,19 +78,37 @@ public class QuietPolicyTests
     }
 
     [Fact]
-    public void A_story_with_no_shortlisted_player_is_kept()
+    public void A_story_that_links_no_person_is_kept_whatever_the_shortlist()
     {
-        var facts = Noise with { Shortlisted = new Dictionary<uint, bool?> { [GameText.Player] = false } };
+        var facts = Noise with { Links = new[] { new RecordLink(GameText.Brighton) }, Shortlist = null };
 
         Assert.Equal("KEEP(no shortlisted player)", Judge(facts));
     }
 
     [Fact]
-    public void A_story_without_links_is_kept()
+    public void A_story_about_a_person_is_kept_while_the_shortlist_is_unreadable()
     {
-        var facts = Noise with { Links = Array.Empty<RecordLink>(), Shortlisted = new Dictionary<uint, bool?>() };
+        Assert.Equal("KEEP(shortlist unreadable)", Judge(Noise with { Shortlist = null }));
+    }
+
+    [Fact]
+    public void A_story_about_a_person_who_is_not_shortlisted_is_kept()
+    {
+        var facts = Noise with { Shortlist = new HashSet<uint> { GameText.OtherPlayer } };
 
         Assert.Equal("KEEP(no shortlisted player)", Judge(facts));
+    }
+
+    [Fact]
+    public void An_empty_shortlist_keeps_every_story()
+    {
+        Assert.Equal("KEEP(no shortlisted player)", Judge(Noise with { Shortlist = new HashSet<uint>() }));
+    }
+
+    [Fact]
+    public void A_message_sent_directly_is_not_blamed_on_an_unreadable_shortlist()
+    {
+        Assert.Equal("KEEP(sent directly)", Judge(Noise with { Forwarded = false, Shortlist = null }));
     }
 
     [Fact]

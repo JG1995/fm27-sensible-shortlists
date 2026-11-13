@@ -1,10 +1,12 @@
 namespace SensibleShortlists.Core.Triage;
 
 /// <summary>
-/// A value read from the game, reduced to the text the game prints for it. Reading text is the one
-/// way of reading values that is known to work for every type the game sends.
+/// A value read from the game, reduced to what the plugin can rely on: the text the game prints
+/// for it, which is known to work for every type the game sends, and, when the value is a game
+/// object or a list of them, the database records they stand for.
 /// </summary>
-public sealed record GameValue(string? Text)
+/// <param name="Records">Null when the value is neither a game object nor a list.</param>
+public sealed record GameValue(string? Text, IReadOnlyList<uint>? Records = null)
 {
     /// <summary>The game prints booleans as <c>True</c> and <c>False</c>; anything else is not one.</summary>
     public bool? AsFlag() => Text switch
