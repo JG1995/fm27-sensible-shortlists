@@ -235,42 +235,41 @@ public class InteropTraceSessionTests
     }
 
     [Fact]
-    public void A_node_is_recorded_with_its_parent_and_property_whatever_the_filter()
+    public void A_queued_request_is_recorded_with_its_kind_and_both_keys_whatever_the_filter()
     {
-        Session(filter: "shortlist").NodeAdded(7, 3, "TrainingSchedule:99");
+        Session(filter: "shortlist").RequestQueued("AddNode", 7, 3);
 
-        Assert.Equal(new[] { "NODE key=7 parent=3 property=TrainingSchedule:99" }, _sink.Lines);
+        Assert.Equal(new[] { "QUEUED AddNode key=7 other=3" }, _sink.Lines);
     }
 
     [Fact]
-    public void The_rest_of_the_node_graph_traffic_is_recorded_one_line_each()
+    public void A_queued_request_that_carries_something_names_it()
     {
         var session = Session();
 
-        session.NodeRemoved(7);
-        session.TargetSet(7, 12);
-        session.DataAdded(12);
-        session.DataSet(12, 4, count => $"List`1:{count} items");
-        session.DataReleased(12);
+        session.RequestQueued("SetPropertyID", 7, 99, "property", "TrainingSchedule:99");
+        session.RequestQueued("SetData", 0, 12, "value", "List`1:4 items");
 
         Assert.Equal(
             new[]
             {
-                "UNNODE key=7",
-                "TARGET key=7 data=12",
-                "DATA key=12",
-                "DATA key=12 = List`1:4 items",
-                "UNDATA key=12",
+                "QUEUED SetPropertyID key=7 other=99 property=TrainingSchedule:99",
+                "QUEUED SetData key=0 other=12 value=List`1:4 items",
             },
             _sink.Lines);
     }
 
     [Fact]
-    public void Data_that_cannot_be_described_is_still_recorded()
+    public void What_a_queued_request_carries_is_sanitized()
     {
-        Session().DataSet<object?>(12, null, _ => throw new InvalidOperationException("boom"));
+        var session = Session();
 
-        Assert.Equal(new[] { "DATA key=12 = <error: InvalidOperationException>" }, _sink.Lines);
+        session.RequestQueued("SetData", 0, 12, "value", "two\nlines");
+        session.RequestQueued("SetData", 0, 13, "value", null);
+
+        Assert.Equal(
+            new[] { @"QUEUED SetData key=0 other=12 value=two\nlines", "QUEUED SetData key=0 other=13 value=<null>" },
+            _sink.Lines);
     }
 
     [Fact]

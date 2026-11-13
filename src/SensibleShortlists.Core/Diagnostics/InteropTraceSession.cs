@@ -84,23 +84,21 @@ public sealed class InteropTraceSession
     }
 
     // The node graph is how the UI tells the simulation what a binding hangs off: every binding is a
-    // node with a parent, and a node can point at data such as a game object. It is recorded whole,
-    // not filtered: a node of interest is understood only through the nodes above it, and those
-    // carry no property to filter on.
+    // node with a parent, and a node can point at data such as a game object. The UI queues these as
+    // requests and the game sends the queue once a frame. The queue is recorded whole, not
+    // filtered: a node of interest is understood only through the nodes above it, and those carry
+    // no property to filter on.
 
-    public void NodeAdded(ulong key, ulong parent, string? property) =>
-        Write($"NODE key={key} parent={parent} property={TraceText.Sanitize(property)}");
+    /// <param name="kind">The request's kind, as the game names it.</param>
+    /// <param name="other">The request's second key. What it is depends on the kind.</param>
+    public void RequestQueued(string? kind, ulong key, ulong other) => Write(Queued(kind, key, other));
 
-    public void NodeRemoved(ulong key) => Write($"UNNODE key={key}");
+    /// <summary>A queued request that carries something besides its keys: a property or a value.</summary>
+    public void RequestQueued(string? kind, ulong key, ulong other, string carries, string? carried) =>
+        Write($"{Queued(kind, key, other)} {carries}={TraceText.Sanitize(carried)}");
 
-    public void TargetSet(ulong key, ulong data) => Write($"TARGET key={key} data={data}");
-
-    public void DataAdded(ulong data) => Write($"DATA key={data}");
-
-    public void DataSet<TValue>(ulong data, TValue value, Func<TValue, string?> describe) =>
-        Write($"DATA key={data} = {TraceText.Sanitize(TraceText.Describe(value, describe))}");
-
-    public void DataReleased(ulong data) => Write($"UNDATA key={data}");
+    private static string Queued(string? kind, ulong key, ulong other) =>
+        $"QUEUED {TraceText.Sanitize(kind)} key={key} other={other}";
 
     private void Write(string line)
     {
