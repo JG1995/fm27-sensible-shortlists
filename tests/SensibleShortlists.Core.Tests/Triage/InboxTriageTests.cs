@@ -116,6 +116,9 @@ public class InboxTriageTests
     public static TheoryData<GameValue> AnswersThatAreNeitherAClubNorNoClub => new()
     {
         new GameValue("FM.UI.TeamReference", new[] { GameText.Brighton }),
+
+        // A club whose record could not be read out of the answer.
+        new GameValue("FM.UI.ClubReference"),
         new GameValue("Brighton & Hove Albion"),
         new GameValue(string.Empty),
     };
@@ -400,6 +403,26 @@ public class InboxTriageTests
         AnswerManagerClub();
 
         Assert.Equal(new object[] { "message 12849", "message 12849" }, _game.Marked);
+    }
+
+    [Fact]
+    public void A_message_still_being_gathered_when_another_career_loads_is_dropped()
+    {
+        _triage = Triage(TriageMode.Quiet);
+        _triage.ManagerTeamSeen(GameText.ManagerTeam);
+        List(1);
+        AnswerManagerClub();
+
+        _triage.MessagesListed(new Listing(Game + 1, Manager, new[] { new ListedMessage(9, "message 9") }));
+        _triage.ManagerTeamSeen(GameText.ManagerTeam);
+        _lines.Clear();
+
+        // The first career's answers arrive late. Its message number may be another message now.
+        AnswerFacts(1, NoiseTitle, read: false);
+        AnswerClubs(GameText.Player);
+
+        Assert.Empty(_game.Marked);
+        Assert.DoesNotContain(_lines, line => line.StartsWith("MESSAGE 1 "));
     }
 
     [Fact]
