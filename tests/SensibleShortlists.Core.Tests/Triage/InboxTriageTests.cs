@@ -170,6 +170,22 @@ public class InboxTriageTests
     }
 
     [Fact]
+    public void A_team_learned_later_serves_later_messages_and_leaves_earlier_verdicts_alone()
+    {
+        List(1);
+        AnswerFacts(1, NoiseTitle);
+
+        _triage.ManagerTeamSeen(GameText.ManagerTeam);
+        List(2);
+        AnswerFacts(2, NoiseTitle);
+        AnswerShortlist(GameText.Player);
+
+        Assert.Equal(
+            new[] { "SHORTLIST ?", "MESSAGE 1 KEEP(team unknown)", "TEAM 24:565", "SHORTLIST 1 people", "MESSAGE 2 QUIET" },
+            _lines.Select(line => line.Split(" forwarded=")[0]));
+    }
+
+    [Fact]
     public void An_unreadable_fact_is_recorded_as_a_question_mark_and_keeps_the_message()
     {
         _triage.ManagerTeamSeen(GameText.ManagerTeam);
