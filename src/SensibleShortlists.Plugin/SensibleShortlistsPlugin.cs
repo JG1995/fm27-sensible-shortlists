@@ -40,11 +40,20 @@ public sealed class SensibleShortlistsPlugin : BasePlugin
             "Comma-separated terms. A property channel is traced when its label contains any of them, "
             + "ignoring case. Empty traces every channel.");
 
+        var traceNodeGraph = Config.Bind(
+            "Diagnostics",
+            "TraceNodeGraph",
+            false,
+            "With TraceInterop on, also record how the UI registers its bindings with the simulation. "
+            + "Every binding in the game is written, so the trace grows by megabytes a minute.");
+
         Log.LogInfo($"{MyPluginInfo.PLUGIN_NAME} {MyPluginInfo.PLUGIN_VERSION} loaded.");
 
         var observers = new List<IInteropObserver>();
+        var tracing = false;
         if (traceInterop.Value && Open(TraceFileName, "Interop trace") is { } traceFile)
         {
+            tracing = true;
             observers.Add(new TraceObserver(new InteropTraceSession(TraceFilter.Parse(traceFilter.Value), traceFile)));
         }
 
@@ -61,7 +70,8 @@ public sealed class SensibleShortlistsPlugin : BasePlugin
         }
 
         _harmony = new Harmony(MyPluginInfo.PLUGIN_GUID);
-        var (installed, total) = InteropFeed.Start(new HookInstaller(_harmony, Log), Log, observers);
+        var (installed, total) = InteropFeed.Start(
+            new HookInstaller(_harmony, Log), Log, observers, withNodeGraph: tracing && traceNodeGraph.Value);
         Log.LogInfo($"Hooked the game's interop layer: {installed} of {total} hooks installed.");
     }
 
