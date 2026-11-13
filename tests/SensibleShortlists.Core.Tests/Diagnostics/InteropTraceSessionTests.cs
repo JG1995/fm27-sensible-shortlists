@@ -235,6 +235,45 @@ public class InteropTraceSessionTests
     }
 
     [Fact]
+    public void A_node_is_recorded_with_its_parent_and_property_whatever_the_filter()
+    {
+        Session(filter: "shortlist").NodeAdded(7, 3, "TrainingSchedule:99");
+
+        Assert.Equal(new[] { "NODE key=7 parent=3 property=TrainingSchedule:99" }, _sink.Lines);
+    }
+
+    [Fact]
+    public void The_rest_of_the_node_graph_traffic_is_recorded_one_line_each()
+    {
+        var session = Session();
+
+        session.NodeRemoved(7);
+        session.TargetSet(7, 12);
+        session.DataAdded(12);
+        session.DataSet(12, 4, count => $"List`1:{count} items");
+        session.DataReleased(12);
+
+        Assert.Equal(
+            new[]
+            {
+                "UNNODE key=7",
+                "TARGET key=7 data=12",
+                "DATA key=12",
+                "DATA key=12 = List`1:4 items",
+                "UNDATA key=12",
+            },
+            _sink.Lines);
+    }
+
+    [Fact]
+    public void Data_that_cannot_be_described_is_still_recorded()
+    {
+        Session().DataSet<object?>(12, null, _ => throw new InvalidOperationException("boom"));
+
+        Assert.Equal(new[] { "DATA key=12 = <error: InvalidOperationException>" }, _sink.Lines);
+    }
+
+    [Fact]
     public void Recorded_text_is_sanitized()
     {
         Session().EventSent("Name", 1, "target\nwith break", null);

@@ -26,4 +26,18 @@ internal sealed class TraceObserver : IInteropObserver
     // The static describer keeps this allocation-free for values that are not traced, which is nearly all.
     public void ValuesDelivered(ulong[] keys, Il2CppSystem.Collections.Generic.List<TypedValue> values) =>
         _session.ValuesDelivered(keys, new GameList(values), static value => GameDescriber.Value(value));
+
+    public void NodeAdded(ulong key, ulong parent, PropertyID property) =>
+        _session.NodeAdded(key, parent, GameDescriber.Property(property));
+
+    public void NodeRemoved(ulong key) => _session.NodeRemoved(key);
+
+    public void TargetSet(ulong key, ulong data) => _session.TargetSet(key, data);
+
+    public void DataAdded(ulong data) => _session.DataAdded(data);
+
+    public void DataSet(ulong data, TypedValue? value) =>
+        _session.DataSet(data, value, static set => GameDescriber.Value(set));
+
+    public void DataReleased(ulong data) => _session.DataReleased(data);
 }

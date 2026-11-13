@@ -29,4 +29,30 @@ internal interface IInteropObserver
     void Tick()
     {
     }
+
+    /// <summary>A binding was registered with the simulation as a node under a parent node.</summary>
+    void NodeAdded(ulong key, ulong parent, PropertyID property)
+    {
+    }
+
+    void NodeRemoved(ulong key)
+    {
+    }
+
+    /// <summary>A node was pointed at a piece of data, such as a game object held in a variable.</summary>
+    void TargetSet(ulong key, ulong data)
+    {
+    }
+
+    void DataAdded(ulong data)
+    {
+    }
+
+    void DataSet(ulong data, TypedValue? value)
+    {
+    }
+
+    void DataReleased(ulong data)
+    {
+    }
 }

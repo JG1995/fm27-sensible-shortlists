@@ -32,6 +32,9 @@ internal static class GameReferences
 
     public static Bindings.Key Key(ulong number) => Unsafe.As<ulong, Bindings.Key>(ref number);
 
+    /// <summary>A data key is laid out like a binding key: one 64-bit number.</summary>
+    public static ulong DataKeyNumber(ref Bindings.DataKey key) => Unsafe.As<Bindings.DataKey, ulong>(ref key);
+
     public static bool TryGetRecord(InteropReference reference, out uint record)
     {
         var found = reference.TryGetValue(RecordKey, out var value);

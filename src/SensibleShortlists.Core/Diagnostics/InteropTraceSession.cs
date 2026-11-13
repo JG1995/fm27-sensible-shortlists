@@ -83,6 +83,33 @@ public sealed class InteropTraceSession
         }
     }
 
+    // The node graph is how the UI tells the simulation what a binding hangs off: every binding is a
+    // node with a parent, and a node can point at data such as a game object. It is recorded whole,
+    // not filtered: a node of interest is understood only through the nodes above it, and those
+    // carry no property to filter on.
+
+    public void NodeAdded(ulong key, ulong parent, string? property) =>
+        Write($"NODE key={key} parent={parent} property={TraceText.Sanitize(property)}");
+
+    public void NodeRemoved(ulong key) => Write($"UNNODE key={key}");
+
+    public void TargetSet(ulong key, ulong data) => Write($"TARGET key={key} data={data}");
+
+    public void DataAdded(ulong data) => Write($"DATA key={data}");
+
+    public void DataSet<TValue>(ulong data, TValue value, Func<TValue, string?> describe) =>
+        Write($"DATA key={data} = {TraceText.Sanitize(TraceText.Describe(value, describe))}");
+
+    public void DataReleased(ulong data) => Write($"UNDATA key={data}");
+
+    private void Write(string line)
+    {
+        lock (_gate)
+        {
+            _sink.Write(line);
+        }
+    }
+
     /// <summary>
     /// The game delivers values in batches: a list of channel keys and a list of values. Whether the
     /// two always line up is not known, so a batch that does not is noted rather than dropped.
