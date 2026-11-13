@@ -138,18 +138,21 @@ internal sealed class ChannelReader : IGameReader
 
         _finished.Add(key);
 
-        // Whatever goes wrong reading the value, whoever asked still gets an answer.
-        GameValue? answer = null;
+        // Whatever goes wrong reading the value, whoever asked still gets an answer, and a value
+        // whose records cannot be read still gives its text.
+        string? text = null;
+        IReadOnlyList<uint>? records = null;
         try
         {
-            answer = value is null ? null : new GameValue(value.AsString(), GameReferences.Records(value));
+            text = value?.AsString();
+            records = value is null ? null : GameReferences.Records(value);
         }
         catch (Exception exception)
         {
             InteropFeed.ReportFirstFailure(nameof(ChannelReader), exception);
         }
 
-        return _waiting.Answer(key, answer);
+        return _waiting.Answer(key, text is null ? null : new GameValue(text, records));
     }
 
     private void Open(GameInteropSubsystem interop, InteropReference target, string property, Action<GameValue?> onValue)
