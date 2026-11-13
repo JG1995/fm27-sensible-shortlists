@@ -56,12 +56,12 @@ internal static class GameReferences
     /// wraps each list item in a value of its own. Each message is copied: the plugin reads from it
     /// on a later tick, and the game is free to reuse the objects it delivered.
     /// </summary>
-    public static Listing? Listing(TypedValue? list)
+    public static Listing? ListingFrom(TypedValue? list)
     {
         var messages = new List<ListedMessage>();
         var game = 0;
         var manager = 0;
-        foreach (var message in References(list) ?? Array.Empty<InteropReference>())
+        foreach (var message in References(list, out _) ?? Array.Empty<InteropReference>())
         {
             if (message.TryGetValue(MessageNumberKey, out var number)
                 && message.TryGetValue(GameKey, out game)
@@ -81,7 +81,7 @@ internal static class GameReferences
     /// </summary>
     public static IReadOnlyList<uint>? Records(TypedValue value)
     {
-        if (References(value) is not { } references)
+        if (References(value, out var itemCount) is not { } references)
         {
             return null;
         }
@@ -95,12 +95,14 @@ internal static class GameReferences
             }
         }
 
-        return references.Count > 0 && records.Count == 0 ? null : records;
+        return itemCount > 0 && records.Count == 0 ? null : records;
     }
 
-    // The game objects a value holds: itself, or the items of a list. Null when it holds neither.
-    private static IReadOnlyList<InteropReference>? References(TypedValue? value)
+    // The game objects a value holds: itself, or those among the items of a list. Null when it is
+    // neither. The item count tells a list of other things apart from an empty list.
+    private static IReadOnlyList<InteropReference>? References(TypedValue? value, out int itemCount)
     {
+        itemCount = 1;
         var boxed = value?.Get();
         if (boxed?.TryCast<InteropReference>() is { } single)
         {
@@ -114,6 +116,7 @@ internal static class GameReferences
             return null;
         }
 
+        itemCount = collection.Count;
         var references = new List<InteropReference>(collection.Count);
         for (var i = 0; i < collection.Count; i++)
         {
