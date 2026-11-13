@@ -54,7 +54,9 @@ public sealed class SensibleShortlistsPlugin : BasePlugin
         if (traceInterop.Value && Open(TraceFileName, "Interop trace") is { } traceFile)
         {
             tracing = true;
-            observers.Add(new TraceObserver(new InteropTraceSession(TraceFilter.Parse(traceFilter.Value), traceFile)));
+            observers.Add(new TraceObserver(
+                new InteropTraceSession(TraceFilter.Parse(traceFilter.Value), traceFile),
+                withNodeGraph: traceNodeGraph.Value));
         }
 
         if (TriageModes.Parse(mode.Value) == TriageMode.Observe && Open(TriageFileName, "Inbox triage") is { } triageFile)
@@ -75,8 +77,7 @@ public sealed class SensibleShortlistsPlugin : BasePlugin
         }
 
         _harmony = new Harmony(MyPluginInfo.PLUGIN_GUID);
-        var (installed, total) = InteropFeed.Start(
-            new HookInstaller(_harmony, Log), Log, observers, withNodeGraph: tracing && traceNodeGraph.Value);
+        var (installed, total) = InteropFeed.Start(new HookInstaller(_harmony, Log), Log, observers);
         Log.LogInfo($"Hooked the game's interop layer: {installed} of {total} hooks installed.");
     }
 

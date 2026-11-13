@@ -30,29 +30,11 @@ internal interface IInteropObserver
     {
     }
 
-    /// <summary>A binding was registered with the simulation as a node under a parent node.</summary>
-    void NodeAdded(ulong key, ulong parent, PropertyID property)
-    {
-    }
-
-    void NodeRemoved(ulong key)
-    {
-    }
-
-    /// <summary>A node was pointed at a piece of data, such as a game object held in a variable.</summary>
-    void TargetSet(ulong key, ulong data)
-    {
-    }
-
-    void DataAdded(ulong data)
-    {
-    }
-
-    void DataSet(ulong data, TypedValue? value)
-    {
-    }
-
-    void DataReleased(ulong data)
+    /// <summary>
+    /// Every observer has had its tick. What is queued for the simulation now is what the game is
+    /// about to send it this frame.
+    /// </summary>
+    void BeforeSend()
     {
     }
 }

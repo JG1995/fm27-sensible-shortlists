@@ -13,8 +13,14 @@ namespace SensibleShortlists.Plugin.Game.Trace;
 internal sealed class TraceObserver : IInteropObserver
 {
     private readonly InteropTraceSession _session;
+    private QueuedRequests? _queue;
 
-    public TraceObserver(InteropTraceSession session) => _session = session;
+    /// <param name="withNodeGraph">Also record the requests the UI queues for the simulation.</param>
+    public TraceObserver(InteropTraceSession session, bool withNodeGraph)
+    {
+        _session = session;
+        _queue = withNodeGraph ? new QueuedRequests(session) : null;
+    }
 
     public void EventSent(uint number, InteropReference? target, TypedValue? data) =>
         _session.EventSent(
@@ -27,17 +33,17 @@ internal sealed class TraceObserver : IInteropObserver
     public void ValuesDelivered(ulong[] keys, Il2CppSystem.Collections.Generic.List<TypedValue> values) =>
         _session.ValuesDelivered(keys, new GameList(values), static value => GameDescriber.Value(value));
 
-    public void NodeAdded(ulong key, ulong parent, PropertyID property) =>
-        _session.NodeAdded(key, parent, GameDescriber.Property(property));
-
-    public void NodeRemoved(ulong key) => _session.NodeRemoved(key);
-
-    public void TargetSet(ulong key, ulong data) => _session.TargetSet(key, data);
-
-    public void DataAdded(ulong data) => _session.DataAdded(data);
-
-    public void DataSet(ulong data, TypedValue? value) =>
-        _session.DataSet(data, value, static set => GameDescriber.Value(set));
-
-    public void DataReleased(ulong data) => _session.DataReleased(data);
+    public void BeforeSend()
+    {
+        // A read that failed once is not tried again every frame. The feed reports the failure.
+        try
+        {
+            _queue?.Record();
+        }
+        catch
+        {
+            _queue = null;
+            throw;
+        }
+    }
 }

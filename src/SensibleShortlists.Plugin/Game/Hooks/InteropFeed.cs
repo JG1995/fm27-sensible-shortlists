@@ -18,32 +18,23 @@ internal static class InteropFeed
     private static IInteropObserver[] s_observers = Array.Empty<IInteropObserver>();
     private static ManualLogSource? s_log;
 
-    /// <param name="withNodeGraph">
-    /// Also hook the node graph. It is every binding in the UI, so it is hooked only when someone
-    /// has asked to see it.
-    /// </param>
     public static (int Installed, int Total) Start(
         HookInstaller hooks,
         ManualLogSource log,
-        IReadOnlyCollection<IInteropObserver> observers,
-        bool withNodeGraph)
+        IReadOnlyCollection<IInteropObserver> observers)
     {
         s_log = log;
         s_observers = observers.ToArray();
 
-        var installed = new List<bool>
+        var installed = new[]
         {
             hooks.TryInstallPrefix(SendEventHook.Name, SendEventHook.Resolve),
             hooks.TryInstallPrefix(OpenChannelHook.Name, OpenChannelHook.Resolve),
             hooks.TryInstallPrefix(ChannelDataHook.Name, ChannelDataHook.Resolve),
             hooks.TryInstallPrefix(TickHook.Name, TickHook.Resolve),
         };
-        if (withNodeGraph)
-        {
-            installed.AddRange(NodeGraphHooks.All.Select(hook => hooks.TryInstallPrefix(hook.Name, hook.Resolve)));
-        }
 
-        return (installed.Count(wasInstalled => wasInstalled), installed.Count);
+        return (installed.Count(wasInstalled => wasInstalled), installed.Length);
     }
 
     public static void EventSent(uint number, InteropReference? target, TypedValue? data) =>
@@ -58,25 +49,13 @@ internal static class InteropFeed
     public static void ValuesDelivered(ulong[] keys, Il2CppSystem.Collections.Generic.List<TypedValue> values) =>
         Publish(nameof(ValuesDelivered), (keys, values), static (observer, v) => observer.ValuesDelivered(v.keys, v.values));
 
-    public static void Tick() => Publish(nameof(Tick), 0, static (observer, _) => observer.Tick());
+    public static void Tick()
+    {
+        Publish(nameof(Tick), 0, static (observer, _) => observer.Tick());
 
-    public static void NodeAdded(ulong key, ulong parent, PropertyID property) =>
-        Publish(nameof(NodeAdded), (key, parent, property), static (observer, n) => observer.NodeAdded(n.key, n.parent, n.property));
-
-    public static void NodeRemoved(ulong key) =>
-        Publish(nameof(NodeRemoved), key, static (observer, removed) => observer.NodeRemoved(removed));
-
-    public static void TargetSet(ulong key, ulong data) =>
-        Publish(nameof(TargetSet), (key, data), static (observer, t) => observer.TargetSet(t.key, t.data));
-
-    public static void DataAdded(ulong data) =>
-        Publish(nameof(DataAdded), data, static (observer, added) => observer.DataAdded(added));
-
-    public static void DataSet(ulong data, TypedValue? value) =>
-        Publish(nameof(DataSet), (data, value), static (observer, d) => observer.DataSet(d.data, d.value));
-
-    public static void DataReleased(ulong data) =>
-        Publish(nameof(DataReleased), data, static (observer, released) => observer.DataReleased(released));
+        // A second round, so an observer can see what every observer queued in the first.
+        Publish(nameof(IInteropObserver.BeforeSend), 0, static (observer, _) => observer.BeforeSend());
+    }
 
     /// <summary>For a hook that fails before it has anything to hand to the feed.</summary>
     public static void ReportFirstFailure(string where, Exception exception)
