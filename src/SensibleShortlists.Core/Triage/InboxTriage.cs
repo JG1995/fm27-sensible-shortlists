@@ -24,12 +24,19 @@ public sealed class InboxTriage
 
     // The flags the game shows on a player's banner. One of them says the player is on a shortlist
     // of the manager's, whichever shortlist that is, which the Shortlist screen's list cannot say.
-    private const string StatusProperty = "PlayerStatusFlagsForTeam";
+    // Candidates for telling that a person is on any of the manager's shortlists, not only the
+    // selected one. Which of them the game answers, and what the answers mean, is what a live
+    // session has to show; until then they are recorded beside the verdicts and feed none.
+    private static readonly string[] PersonProbes =
+    {
+        "PlayerStatusFlagsForTeam", "PlayerStatusFlagsForRecruitment", "PlayerStatus", "DaysLeftOnShortlist",
+        "IsShortlisted", "IsBeingScouted", "PersonIsTransferTarget",
+    };
 
     private readonly IGameReader _game;
     private readonly ITraceSink _log;
     private readonly HashSet<long> _started = new();
-    private readonly HashSet<uint> _statusAsked = new();
+    private readonly HashSet<uint> _peopleAsked = new();
     private uint? _managerTeam;
     private long? _runningGame;
 
@@ -57,7 +64,7 @@ public sealed class InboxTriage
         if (_runningGame is { } known && known != listing.Game)
         {
             _started.Clear();
-            _statusAsked.Clear();
+            _peopleAsked.Clear();
             _managerTeam = null;
             _log.Write($"NOTE game {listing.Game}");
         }
@@ -89,23 +96,28 @@ public sealed class InboxTriage
         _log.Write(
             $"MESSAGE {facts.Id} {verdict} forwarded={Show(facts.Forwarded)} respond={Show(facts.CanRespond)} "
             + $"responded={Show(facts.Responded)} priority={Show(facts.Priority)} links={links} title={title}");
-        RecordStatusOfPeople(facts);
+        ProbePeople(facts);
     }
 
-    // Recorded beside the verdicts, not used in them yet: the way the plugin asks for a status in
-    // the context of a team is not confirmed, and a verdict must not rest on an unconfirmed read.
-    private void RecordStatusOfPeople(MessageFacts facts)
+    private void ProbePeople(MessageFacts facts)
     {
-        if (_managerTeam is not { } team)
+        foreach (var person in facts.Links.Where(link => link.IsPerson && _peopleAsked.Add(link.Record)))
         {
-            return;
+            foreach (var property in PersonProbes)
+            {
+                _game.ReadPerson(person.Record, property, value => _log.Write($"PERSON {person} {property}={Show(value)}"));
+            }
+        }
+    }
+
+    private static string Show(GameValue? value)
+    {
+        if (value?.Flags is { } flags)
+        {
+            return $"[{string.Join(",", flags.Select(TraceText.Sanitize))}]";
         }
 
-        foreach (var person in facts.Links.Where(link => link.IsPerson && _statusAsked.Add(link.Record)))
-        {
-            _game.ReadPersonInTeam(person.Record, team, StatusProperty, value =>
-                _log.Write($"PERSON {person} status={(value?.Text is { } text ? TraceText.Sanitize(text) : "?")}"));
-        }
+        return value?.Text is { } text ? TraceText.Sanitize(text) : "?";
     }
 
     private static string Mark(MessageFacts facts, RecordLink link)
