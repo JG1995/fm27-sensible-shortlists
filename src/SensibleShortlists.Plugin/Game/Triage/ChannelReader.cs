@@ -82,22 +82,7 @@ internal sealed class ChannelReader : IGameReader
             return;
         }
 
-        // Giving back what the plugin took is not rationed.
-        foreach (var key in _finished)
-        {
-            interop.CloseChannel(GameReferences.Key(key));
-            interop.RemoveNode(GameReferences.Key(key));
-        }
-
-        _finished.Clear();
-
-        // A read that failed between registering its node and opening its channel has only a node.
-        foreach (var key in _nodesOnly)
-        {
-            interop.RemoveNode(GameReferences.Key(key));
-        }
-
-        _nodesOnly.Clear();
+        GiveBack(interop);
 
         for (var made = 0; made < ReadsPerTick && _queue.TryDequeue(out var queued); made++)
         {
@@ -111,6 +96,35 @@ internal sealed class ChannelReader : IGameReader
                 InteropFeed.ReportFirstFailure(nameof(ChannelReader), exception);
                 queued.OnValue(null);
             }
+        }
+    }
+
+    // Giving back what the plugin took is not rationed. The lists are emptied whatever happens:
+    // a key the game refuses to release must not be offered again on every tick, blocking all reads.
+    private void GiveBack(GameInteropSubsystem interop)
+    {
+        try
+        {
+            foreach (var key in _finished)
+            {
+                interop.CloseChannel(GameReferences.Key(key));
+                interop.RemoveNode(GameReferences.Key(key));
+            }
+
+            // A read that failed between registering its node and opening its channel has only a node.
+            foreach (var key in _nodesOnly)
+            {
+                interop.RemoveNode(GameReferences.Key(key));
+            }
+        }
+        catch (Exception exception)
+        {
+            InteropFeed.ReportFirstFailure($"{nameof(ChannelReader)}.{nameof(GiveBack)}", exception);
+        }
+        finally
+        {
+            _finished.Clear();
+            _nodesOnly.Clear();
         }
     }
 
