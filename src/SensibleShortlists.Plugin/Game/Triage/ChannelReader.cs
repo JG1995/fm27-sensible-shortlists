@@ -21,8 +21,8 @@ internal sealed class ChannelReader : IGameReader
 {
     private const int ReadsPerTick = 48;
 
-    // About fifteen seconds at sixty ticks a second. The game answers its own UI within a tick or two.
-    private const int PatienceInTicks = 900;
+    // The game answers its own UI within a tick or two.
+    private static readonly TimeSpan Patience = TimeSpan.FromSeconds(15);
 
     // Keys the UI uses are hashes of binding paths. The plugin counts up from a fixed start instead.
     private const ulong FirstKey = 0x5353_4C52_0000_0000;
@@ -30,14 +30,17 @@ internal sealed class ChannelReader : IGameReader
     private readonly PropertyCatalog _properties;
     private readonly ITraceSink _log;
     private readonly Queue<(Action<GameInteropSubsystem> Call, Action<GameValue?> OnValue)> _queue = new();
-    private readonly ReadLedger _waiting = new(PatienceInTicks);
+    private readonly System.Diagnostics.Stopwatch _clock = System.Diagnostics.Stopwatch.StartNew();
+    private readonly ReadLedger _waiting;
     private readonly List<ulong> _finished = new();
+    private readonly List<ulong> _nodesOnly = new();
     private ulong _nextKey = FirstKey;
 
     public ChannelReader(PropertyCatalog properties, ITraceSink log)
     {
         _properties = properties;
         _log = log;
+        _waiting = new ReadLedger(Patience, () => _clock.Elapsed);
     }
 
     /// <summary>The running game's identifier, needed to refer to a person in it.</summary>
@@ -66,14 +69,14 @@ internal sealed class ChannelReader : IGameReader
     /// <summary>Makes the queued calls into the game. Called on the game's tick.</summary>
     public void Flush()
     {
-        var givenUp = _waiting.Tick();
+        var givenUp = _waiting.GiveUpOverdue();
         if (givenUp.Count > 0)
         {
             _finished.AddRange(givenUp);
             _log.Write($"NOTE the game did not answer {givenUp.Count} reads; they count as unreadable");
         }
 
-        if ((_queue.Count == 0 && _finished.Count == 0)
+        if ((_queue.Count == 0 && _finished.Count == 0 && _nodesOnly.Count == 0)
             || !GameSubsystems.TryGet<GameInteropSubsystem>(out var interop))
         {
             return;
@@ -87,6 +90,14 @@ internal sealed class ChannelReader : IGameReader
         }
 
         _finished.Clear();
+
+        // A read that failed between registering its node and opening its channel has only a node.
+        foreach (var key in _nodesOnly)
+        {
+            interop.RemoveNode(GameReferences.Key(key));
+        }
+
+        _nodesOnly.Clear();
 
         for (var made = 0; made < ReadsPerTick && _queue.TryDequeue(out var queued); made++)
         {
@@ -138,15 +149,14 @@ internal sealed class ChannelReader : IGameReader
         // The simulation answers a channel only on a node it knows. The game's UI registers every
         // binding as a node before opening a channel on it; a node at the root has no parent.
         var key = _nextKey++;
+        interop.AddNode(GameReferences.Key(key), default, id);
         try
         {
-            interop.AddNode(GameReferences.Key(key), default, id);
             interop.OpenChannel(target, id, GameReferences.Key(key));
         }
         catch
         {
-            // Whatever was registered before the failure is given back on the next tick.
-            _finished.Add(key);
+            _nodesOnly.Add(key);
             throw;
         }
 
