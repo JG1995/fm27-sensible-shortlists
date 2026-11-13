@@ -79,7 +79,7 @@ public sealed class InboxTriage
         var club = new ManagerClubRead(this, listing.Manager);
         foreach (var message in unseen)
         {
-            new Gathering(this, message, club).Start();
+            new Gathering(this, listing.Game, message, club).Start();
         }
 
         club.Start();
@@ -190,6 +190,7 @@ public sealed class InboxTriage
     private sealed class Gathering
     {
         private readonly InboxTriage _triage;
+        private readonly long _game;
         private readonly ListedMessage _message;
         private readonly ManagerClubRead _managerClub;
         private readonly Dictionary<uint, IReadOnlySet<uint>?> _clubs = new();
@@ -200,9 +201,10 @@ public sealed class InboxTriage
         private EmbeddedText? _title;
         private int _waitingFor;
 
-        public Gathering(InboxTriage triage, ListedMessage message, ManagerClubRead managerClub)
+        public Gathering(InboxTriage triage, long game, ListedMessage message, ManagerClubRead managerClub)
         {
             _triage = triage;
+            _game = game;
             _message = message;
             _managerClub = managerClub;
         }
@@ -272,17 +274,27 @@ public sealed class InboxTriage
             }
         }
 
-        private void Finish(uint? managerClub) => _triage.Judge(
-            _message,
-            new MessageFacts(
-                _message.Id,
-                _responded,
-                _priority,
-                _forwarded,
-                _read,
-                _title?.Plain,
-                _title?.Links ?? Array.Empty<RecordLink>(),
-                _clubs),
-            managerClub);
+        private void Finish(uint? managerClub)
+        {
+            // Another career was loaded while this message was being asked about. Its number may
+            // belong to a different message now, and the team on record is the other career's.
+            if (_triage._runningGame != _game)
+            {
+                return;
+            }
+
+            _triage.Judge(
+                _message,
+                new MessageFacts(
+                    _message.Id,
+                    _responded,
+                    _priority,
+                    _forwarded,
+                    _read,
+                    _title?.Plain,
+                    _title?.Links ?? Array.Empty<RecordLink>(),
+                    _clubs),
+                managerClub);
+        }
     }
 }
