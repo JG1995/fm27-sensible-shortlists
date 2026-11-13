@@ -52,9 +52,9 @@ public class InboxTriageTests
 
     private static GameValue Flag(bool value) => new(value ? "True" : "False");
 
-    // The game answers a club as a game object, and "no club" as a value that is not one.
+    // The game answers a club as a game object, and "no club" as its null reference.
     private static GameValue Club(uint? club) =>
-        club is { } record ? new GameValue("ClubReference", new[] { record }) : new GameValue("NullReference");
+        club is { } record ? new GameValue("FM.UI.ClubReference", new[] { record }) : new GameValue("SI.Bindable.NullReference");
 
     [Fact]
     public void A_forwarded_story_about_a_player_at_another_club_is_judged_quiet_and_recorded()
@@ -111,6 +111,28 @@ public class InboxTriageTests
             "MESSAGE 1 KEEP(player's club unreadable) forwarded=True responded=False priority=False read=True "
             + "links=24:504,1:155126? title=\"Brighton make offer for King\"",
             _lines.Last());
+    }
+
+    public static TheoryData<GameValue> AnswersThatAreNeitherAClubNorNoClub => new()
+    {
+        new GameValue("FM.UI.TeamReference", new[] { GameText.Brighton }),
+        new GameValue("Brighton & Hove Albion"),
+        new GameValue(string.Empty),
+    };
+
+    [Theory]
+    [MemberData(nameof(AnswersThatAreNeitherAClubNorNoClub))]
+    public void An_answer_that_is_neither_a_club_nor_no_club_makes_the_persons_clubs_unreadable(GameValue answer)
+    {
+        _triage.ManagerTeamSeen(GameText.ManagerTeam);
+        List(1);
+        AnswerFacts(1, NoiseTitle);
+        _game.Answer(GameText.Player, "Club", answer);
+        _game.Answer(GameText.Player, "ContractClub", Club(GameText.BrightonClub));
+        AnswerManagerClub();
+
+        Assert.StartsWith("MESSAGE 1 KEEP(player's club unreadable) ", _lines.Last());
+        Assert.Contains("1:155126?", _lines.Last());
     }
 
     [Fact]
