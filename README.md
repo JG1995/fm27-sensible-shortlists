@@ -4,15 +4,16 @@ A BepInEx plugin for Football Manager 27 that aims to make the shortlist a plain
 
 ## Status
 
-**Not usable for its purpose yet.** The plugin can judge which inbox messages are shortlist noise and record its verdicts. It does not act on them yet.
+**Works in part; still under test.** With `Mode = Quiet` the plugin marks as read each forwarded news story about a player at another club, so those stories stop arriving unread. They still appear in Messages. It does not check which shortlist a player is on: the game offers no way to ask.
 
 | Step | State |
 | ---- | ----- |
 | Is there a game setting for this? | Checked: no. See below. |
-| Can an add-on do it? | Yes in principle, through the game's UI interop layer. The exact mechanism needs data from a running game. |
+| Can an add-on do it? | Yes, through the game's UI interop layer: it can read the inbox and send the game's own "mark as read" event. |
 | Interop trace (the tool that gathers that data) | Built and run in the game. |
-| Inbox triage (judging each message) | Built in observe mode; not yet run in the game. |
-| Quieting the judged messages | Not started. |
+| Inbox triage (judging each message) | Built and run in the game. The current rules (no shortlist check, clubs read per player) have not run yet. |
+| Marking quiet messages read | Built and seen working in the game. |
+| Keeping quiet messages out of the list | Not started; not known to be possible. |
 
 ## What the game offers on its own
 
@@ -58,7 +59,7 @@ The plugin writes `BepInEx/config/fm27.sensibleshortlists.cfg` the first time it
 
 | Section | Setting | Default | Meaning |
 | ------- | ------- | ------- | ------- |
-| `QuietShortlist` | `Mode` | `Off` | `Observe` judges each inbox message and records the verdict to `BepInEx/SensibleShortlists.triage.log`. It changes nothing in the game. `Quiet` does the same and marks as read each unread message it judges to be shortlist noise. |
+| `QuietShortlist` | `Mode` | `Off` | `Observe` judges each inbox message and records the verdict to `BepInEx/SensibleShortlists.triage.log`. It changes nothing in the game. `Quiet` does the same and marks as read each unread message it judges to be noise: a forwarded story about a player at another club that does not involve your club or players. |
 | `Diagnostics` | `TraceInterop` | `false` | Record what the UI sends to and receives from the simulation, to `BepInEx/SensibleShortlists.trace.log`. For development; leave off for normal play. |
 | `Diagnostics` | `TraceNodeGraph` | `false` | With `TraceInterop` on, also record how the UI registers its bindings with the simulation. Large. |
 | `Diagnostics` | `TraceFilter` | `shortlist,message,news,portal` | Comma-separated terms. A property channel is traced when its label contains one of them. Empty traces everything. |
@@ -66,4 +67,6 @@ The plugin writes `BepInEx/config/fm27.sensibleshortlists.cfg` the first time it
 ## Limitations
 
 - The plugin relies on undocumented game internals. A game update can break it; when a hook no longer fits, the plugin logs that and skips it.
+- A quieted story is marked read, not removed.
+- The plugin recognises your club in a story by the story's title: your first team, your club, or one of your players. A story that names only one of your other teams, or names your club only in its body, is not recognised.
 - Windows, Steam, BepInEx 6 only.

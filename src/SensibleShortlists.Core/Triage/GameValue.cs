@@ -6,11 +6,7 @@ namespace SensibleShortlists.Core.Triage;
 /// object or a list of them, the database records they stand for.
 /// </summary>
 /// <param name="Records">Null when the value is neither a game object nor a list.</param>
-/// <param name="Flags">
-/// The status flags a list value holds, as the game names them. Null when the value is not a list
-/// of status flags.
-/// </param>
-public sealed record GameValue(string? Text, IReadOnlyList<uint>? Records = null, IReadOnlyList<string>? Flags = null)
+public sealed record GameValue(string? Text, IReadOnlyList<uint>? Records = null)
 {
     /// <summary>The game prints booleans as <c>True</c> and <c>False</c>; anything else is not one.</summary>
     public bool? AsFlag() => Text switch

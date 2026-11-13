@@ -1,6 +1,6 @@
 namespace SensibleShortlists.Core.Triage;
 
-/// <summary>Whether a message is shortlist noise, and if not, the reason it must stay.</summary>
+/// <summary>Whether a message is noise from following a player, and if not, the reason it must stay.</summary>
 /// <remarks>
 /// A quiet verdict is acted on, so it has to be given on purpose: a verdict left at its default
 /// keeps the message.
